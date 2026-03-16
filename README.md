@@ -41,28 +41,30 @@ Dockerized Discord bot application using Azure OpenAI and Azure Content Safety t
 3. Set [`DISCORD_ADMIN_USER_IDS`](.env.example) to one or more comma-separated Discord user IDs.
 4. Adjust [`BOT_PERSONA`](.env.example) and [`SYSTEM_PROMPT_BASE`](.env.example) as needed.
 
-## Publish image to GitHub Container Registry
-### 1. Prepare environment
-On Windows cmd.exe:
-```bat
-copy .env.example .env
-```
+## Build and publish image with GitHub Actions
+A GitHub Actions workflow at [`.github/workflows/docker.yml`](.github/workflows/docker.yml) builds this image automatically.
 
-### 2. Build and tag the image
-```bat
-docker build -t ghcr.io/ratenS/azureapi-discordbot:latest -t ghcr.io/ratenS/azureapi-discordbot:v0.0.1 .
-```
+### Publish behavior
+- Push to the default branch publishes `ghcr.io/ratenS/azureapi-discordbot:latest`
+- Push a Git tag matching `v*` publishes the matching version tag, such as `ghcr.io/ratenS/azureapi-discordbot:v0.0.1`
+- Non-release builds also receive a traceable SHA tag
+- Pull requests build the image for validation but do not push to GHCR
 
-### 3. Authenticate to GHCR
-Create a GitHub token with package write permission, then run:
-```bat
-echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u ratenS --password-stdin
-```
+### Repository settings required
+- The repository default branch should be `main`
+- GitHub Actions must be enabled for the repository
+- Package permissions must allow workflow publishing to GitHub Container Registry
+- The workflow uses the built-in `GITHUB_TOKEN`, so no personal access token is required for the publish job
 
-### 4. Push both tags
+### Release flow
+1. Merge changes into `main` to publish `latest`.
+2. Create and push a Git tag such as `v0.0.1` to publish a versioned image.
+3. Deploy pinned version tags in production for repeatable rollouts.
+
+Example Windows cmd.exe commands:
 ```bat
-docker push ghcr.io/ratenS/azureapi-discordbot:latest
-docker push ghcr.io/ratenS/azureapi-discordbot:v0.0.1
+git tag v0.0.1
+git push origin v0.0.1
 ```
 
 ## Deploy with Docker Compose
@@ -84,7 +86,7 @@ docker compose up -d
 
 ### 4. View logs
 ```bat
-docker compose logs -f bot
+docker compose logs -f azure-discord-bot
 ```
 
 ### 5. Stop the stack
@@ -92,7 +94,7 @@ docker compose logs -f bot
 docker compose down
 ```
 
-Use [`ghcr.io/ratenS/azureapi-discordbot:v0.0.1`](docker-compose.yml) for repeatable deployments. Reserve `latest` for manual testing or convenience workflows.
+Use [`ghcr.io/ratenS/azureapi-discordbot:v0.0.1`](docker-compose.yml) for repeatable deployments. Reserve `latest` for branch-based testing and validation.
 
 ## Run locally without Docker
 ### 1. Create a virtual environment
