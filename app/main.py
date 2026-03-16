@@ -50,6 +50,7 @@ discord_bot = AzureDiscordBot(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    database.initialize_schema()
     bot_task = asyncio.create_task(discord_bot.start(settings.discord_bot_token))
     try:
         with database.session() as session:

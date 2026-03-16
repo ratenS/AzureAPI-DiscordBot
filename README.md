@@ -84,6 +84,8 @@ docker compose pull
 docker compose up -d
 ```
 
+The application now bootstraps PostgreSQL extensions and schema from [`db/init/001_enable_pgvector.sql`](db/init/001_enable_pgvector.sql) and [`db/init/002_schema.sql`](db/init/002_schema.sql) during startup before running memory cleanup. The Docker-mounted init scripts remain useful for first-time database creation, but the app no longer depends on container first-run behavior for table creation.
+
 ### 4. View logs
 ```bat
 docker compose logs -f azure-discord-bot
