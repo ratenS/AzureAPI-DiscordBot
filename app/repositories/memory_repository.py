@@ -184,6 +184,27 @@ class MemoryRepository:
             },
         )
 
+    def clear_conversation_messages(self, session: Session, scope: ScopeRef) -> None:
+        session.execute(
+            text(
+                """
+                DELETE FROM conversation_messages
+                WHERE scope_type = :scope_type
+                  AND guild_id IS NOT DISTINCT FROM :guild_id
+                  AND channel_id IS NOT DISTINCT FROM :channel_id
+                  AND thread_id IS NOT DISTINCT FROM :thread_id
+                  AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
+                """
+            ),
+            {
+                "scope_type": scope.scope_type.value,
+                "guild_id": scope.guild_id,
+                "channel_id": scope.channel_id,
+                "thread_id": scope.thread_id,
+                "dm_user_id": scope.dm_user_id,
+            },
+        )
+
     def set_memory_enabled(self, session: Session, scope: ScopeRef, enabled: bool, retention_days: int) -> None:
         self._ensure_scope_settings_row(session, scope, retention_days)
         session.execute(
@@ -395,6 +416,38 @@ class MemoryRepository:
 
         return dict(row) if row else None
 
+    def fetch_recent_conversation_messages(
+        self,
+        session: Session,
+        scope: ScopeRef,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        rows = session.execute(
+            text(
+                """
+                SELECT discord_message_id, author_user_id, role, content
+                FROM conversation_messages
+                WHERE scope_type = :scope_type
+                  AND guild_id IS NOT DISTINCT FROM :guild_id
+                  AND channel_id IS NOT DISTINCT FROM :channel_id
+                  AND thread_id IS NOT DISTINCT FROM :thread_id
+                  AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
+                ORDER BY created_at DESC, id DESC
+                LIMIT :limit
+                """
+            ),
+            {
+                "scope_type": scope.scope_type.value,
+                "guild_id": scope.guild_id,
+                "channel_id": scope.channel_id,
+                "thread_id": scope.thread_id,
+                "dm_user_id": scope.dm_user_id,
+                "limit": limit,
+            },
+        ).mappings()
+
+        return [dict(row) for row in rows]
+
     def delete_assistant_message_by_discord_id(
         self,
         session: Session,
@@ -411,6 +464,30 @@ class MemoryRepository:
                   AND thread_id IS NOT DISTINCT FROM :thread_id
                   AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
                   AND role = 'assistant'
+                  AND discord_message_id = :discord_message_id
+                """
+            ),
+            {
+                "scope_type": scope.scope_type.value,
+                "guild_id": scope.guild_id,
+                "channel_id": scope.channel_id,
+                "thread_id": scope.thread_id,
+                "dm_user_id": scope.dm_user_id,
+                "discord_message_id": discord_message_id,
+            },
+        )
+        return bool(result.rowcount)
+
+    def delete_message_by_discord_id(self, session: Session, scope: ScopeRef, discord_message_id: int) -> bool:
+        result = session.execute(
+            text(
+                """
+                DELETE FROM conversation_messages
+                WHERE scope_type = :scope_type
+                  AND guild_id IS NOT DISTINCT FROM :guild_id
+                  AND channel_id IS NOT DISTINCT FROM :channel_id
+                  AND thread_id IS NOT DISTINCT FROM :thread_id
+                  AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
                   AND discord_message_id = :discord_message_id
                 """
             ),

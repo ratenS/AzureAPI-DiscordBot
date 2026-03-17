@@ -384,8 +384,8 @@ class MemoryGroup:
 
         scope = self.bot._resolve_interaction_scope(interaction)
         with self.bot.database.session() as session:
-            self.bot.memory_service.clear_scope_memories(session, scope)
-        await interaction.response.send_message("Memories cleared for this scope.", ephemeral=True)
+            self.bot.memory_service.clear_scope_context(session, scope)
+        await interaction.response.send_message("Memories and conversation history cleared for this scope.", ephemeral=True)
 
     async def disable(self, interaction: discord.Interaction) -> None:
         if not self.bot.is_admin(interaction.user.id):
@@ -715,17 +715,55 @@ async def _delete_bot_message_for_scope_from_channel(
             discord_message_id,
         )
 
+    deleted_user_record = False
+    if deleted_record:
+        deleted_user_record = await _delete_recent_user_message_for_scope(bot, scope, discord_message_id)
+
     logger.info(
         "bot_admin_delete_message_record_deleted",
         discord_message_id=discord_message_id,
         deleted_record=deleted_record,
         deleted_discord_message=deleted_discord_message,
+        deleted_user_record=deleted_user_record,
     )
+    if deleted_discord_message and deleted_record and deleted_user_record:
+        return "Deleted the bot chat message and removed its stored conversation record and paired user message record."
     if deleted_discord_message and deleted_record:
         return "Deleted the bot chat message and removed its stored conversation record."
+    if deleted_record and deleted_user_record:
+        return "The Discord message was already gone, but its stored conversation record and paired user message record were removed."
     if deleted_record:
         return "The Discord message was already gone, but its stored conversation record was removed."
     return "No stored bot chat matched that message ID in this scope."
+
+
+async def _delete_recent_user_message_for_scope(
+    bot: AzureDiscordBot,
+    scope: ScopeRef,
+    assistant_discord_message_id: int,
+) -> bool:
+    with bot.database.session() as session:
+        recent_messages = bot.memory_service.get_recent_conversation_messages(session, scope, limit=20)
+        seen_assistant = False
+        target_user_message_id: int | None = None
+
+        for record in recent_messages:
+            if not seen_assistant:
+                if record.role == "assistant" and record.discord_message_id == assistant_discord_message_id:
+                    seen_assistant = True
+                continue
+
+            if record.role == "assistant":
+                continue
+
+            if record.role == "user" and record.discord_message_id is not None:
+                target_user_message_id = record.discord_message_id
+                break
+
+        if target_user_message_id is None:
+            return False
+
+        return bot.memory_service.delete_message_by_discord_id(session, scope, target_user_message_id)
 
 
 async def _find_previous_bot_message_id(channel: discord.abc.Messageable, current_message_id: int, bot_user_id: int | None) -> int | None:

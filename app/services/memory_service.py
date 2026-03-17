@@ -15,6 +15,14 @@ class AssistantMessageRecord:
     content: str
 
 
+@dataclass(slots=True)
+class ConversationMessageRecord:
+    discord_message_id: int | None
+    author_user_id: int
+    role: str
+    content: str
+
+
 class MemoryService:
     def __init__(self, repository: MemoryRepository, retention_days: int, sync_heuristics_enabled: bool) -> None:
         self._repository = repository
@@ -89,6 +97,21 @@ class MemoryService:
     def delete_assistant_message_by_discord_id(self, session: Session, scope: ScopeRef, discord_message_id: int) -> bool:
         return self._repository.delete_assistant_message_by_discord_id(session, scope, discord_message_id)
 
+    def get_recent_conversation_messages(self, session: Session, scope: ScopeRef, limit: int = 20) -> List[ConversationMessageRecord]:
+        rows = self._repository.fetch_recent_conversation_messages(session, scope, limit=limit)
+        return [
+            ConversationMessageRecord(
+                discord_message_id=row["discord_message_id"],
+                author_user_id=row["author_user_id"],
+                role=row["role"],
+                content=row["content"],
+            )
+            for row in rows
+        ]
+
+    def delete_message_by_discord_id(self, session: Session, scope: ScopeRef, discord_message_id: int) -> bool:
+        return self._repository.delete_message_by_discord_id(session, scope, discord_message_id)
+
     def maybe_extract_memories(self, session: Session, scope: ScopeRef, content: str) -> None:
         if not self._sync_heuristics_enabled:
             return
@@ -119,6 +142,10 @@ class MemoryService:
         return f"Summary of stored memories: {summary}"
 
     def clear_scope_memories(self, session: Session, scope: ScopeRef) -> None:
+        self._repository.clear_memories(session, scope)
+
+    def clear_scope_context(self, session: Session, scope: ScopeRef) -> None:
+        self._repository.clear_conversation_messages(session, scope)
         self._repository.clear_memories(session, scope)
 
     def set_scope_memory_enabled(self, session: Session, scope: ScopeRef, enabled: bool) -> None:
