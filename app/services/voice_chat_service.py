@@ -95,7 +95,7 @@ class VoiceChatService:
             channel_type=type(voice_channel).__name__,
         )
         try:
-            voice_client = await voice_channel.connect(cls=voice_recv.VoiceRecvClient)
+            voice_client = await voice_channel.connect()
         except Exception as exc:
             logger.exception(
                 "voice_connect_failed",
@@ -105,37 +105,21 @@ class VoiceChatService:
                 error=str(exc),
             )
             raise
-
-        await asyncio.sleep(1.0)
         is_connected = voice_client.is_connected()
-        listen_supported = hasattr(voice_client, "listen")
         logger.info(
             "voice_connect_succeeded",
             guild_id=guild.id,
             channel_id=voice_channel.id,
             channel_type=type(voice_channel).__name__,
-            voice_client_type=type(voice_client).__name__,
             voice_client_channel_id=getattr(getattr(voice_client, "channel", None), "id", None),
             is_connected=is_connected,
-            listen_supported=listen_supported,
-            guild_voice_client_is_same_object=(guild.voice_client is voice_client),
-            guild_voice_client_type=(type(guild.voice_client).__name__ if guild.voice_client is not None else None),
-            guild_voice_client_connected=(guild.voice_client.is_connected() if guild.voice_client is not None else None),
         )
-        if not is_connected or not listen_supported:
+        if not is_connected:
             logger.error(
                 "voice_connect_unusable_client",
                 guild_id=guild.id,
                 channel_id=voice_channel.id,
                 channel_type=type(voice_channel).__name__,
-                voice_client_type=type(voice_client).__name__,
-                voice_client_repr=repr(voice_client),
-                voice_client_channel_id=getattr(getattr(voice_client, "channel", None), "id", None),
-                is_connected=is_connected,
-                listen_supported=listen_supported,
-                guild_voice_client_type=(type(guild.voice_client).__name__ if guild.voice_client is not None else None),
-                guild_voice_client_channel_id=getattr(getattr(guild.voice_client, "channel", None), "id", None),
-                guild_voice_client_connected=(guild.voice_client.is_connected() if guild.voice_client is not None else None),
             )
             try:
                 await voice_client.disconnect(force=True)
