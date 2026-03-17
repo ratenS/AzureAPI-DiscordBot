@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from app.config import Settings
 from app.db import Database
-from app.models import ScopeRef, ScopeType
+from app.models import ScopeRef, ScopeType, VideoGenerationResult
 from app.services.chat_service import ChatService
 from app.services.image_service import ImageService
 from app.services.memory_service import MemoryService
@@ -204,12 +204,20 @@ class VideoCommand:
                     prompt,
                     {},
                 )
-            await interaction.followup.send(video_result)
+            await self._send_video_result(interaction, video_result)
         except RateLimitExceeded:
             await interaction.followup.send("Rate limit exceeded for video generation.")
         except Exception as exc:
             logger.exception("video_generation_failed", error=str(exc))
             await interaction.followup.send("Video generation failed.")
+
+    async def _send_video_result(self, interaction: discord.Interaction, video_result: VideoGenerationResult) -> None:
+        if video_result.has_file and video_result.file_name and video_result.video_bytes:
+            discord_file = discord.File(BytesIO(video_result.video_bytes), filename=video_result.file_name)
+            await interaction.followup.send(content=video_result.user_message(), file=discord_file)
+            return
+
+        await interaction.followup.send(video_result.user_message())
 
 
 class SpeechCommand:

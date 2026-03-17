@@ -9,7 +9,7 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 - Optional long-term memory extraction using simple heuristics
 - Admin memory inspection, clearing, and toggling
 - Image generation with metadata persistence
-- Video generation with metadata persistence
+- Video generation with Azure OpenAI Sora-style job polling, direct MP4 download when available, Discord attachment delivery, and metadata persistence
 - Speech generation with metadata persistence
 - PostgreSQL persistence with `pgvector`
 - Health endpoints for container readiness and liveness
@@ -131,6 +131,7 @@ python -m app.main
 ## Discord usage
 - In guild channels, mention the bot to chat.
 - In DMs, send messages directly.
+- [`/video`](app/discord_client.py:185) now submits a Sora-style video generation job, polls Azure OpenAI until completion, attempts direct MP4 download, and attaches the result in Discord when available. If direct download is unavailable, it falls back to a completion URL or status message. Long-running jobs can still take several minutes.
 - Use slash commands such as:
   - `/image`
   - `/video`

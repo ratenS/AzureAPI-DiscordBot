@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     azure_openai_embedding_deployment: str = Field(alias="AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
     azure_openai_image_deployment: str = Field(alias="AZURE_OPENAI_IMAGE_DEPLOYMENT")
     azure_openai_video_deployment: str = Field(alias="AZURE_OPENAI_VIDEO_DEPLOYMENT")
+    azure_openai_video_size: str = Field(default="1280x720", alias="AZURE_OPENAI_VIDEO_SIZE")
+    azure_openai_video_seconds: int = Field(default=4, alias="AZURE_OPENAI_VIDEO_SECONDS")
+    azure_openai_video_poll_interval_seconds: int = Field(default=20, alias="AZURE_OPENAI_VIDEO_POLL_INTERVAL_SECONDS")
+    azure_openai_video_poll_max_attempts: int = Field(default=18, alias="AZURE_OPENAI_VIDEO_POLL_MAX_ATTEMPTS")
+    azure_openai_video_download_enabled: bool = Field(default=True, alias="AZURE_OPENAI_VIDEO_DOWNLOAD_ENABLED")
     azure_openai_speech_deployment: str = Field(alias="AZURE_OPENAI_SPEECH_DEPLOYMENT")
     azure_openai_speech_voice: str = Field(default="alloy", alias="AZURE_OPENAI_SPEECH_VOICE")
 
