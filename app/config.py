@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     speech_key: str = Field(alias="SPEECH_KEY")
     speech_region: str = Field(alias="SPEECH_REGION")
     azure_openai_realtime_deployment: str = Field(alias="AZURE_OPENAI_REALTIME_DEPLOYMENT")
-    voice_chat_synthesis_voice: str = Field(default="en-US-AvaMultilingualNeural", alias="VOICE_CHAT_SYNTHESIS_VOICE")
     voice_chat_realtime_voice: str = Field(default="alloy", alias="VOICE_CHAT_REALTIME_VOICE")
     voice_chat_realtime_vad_type: str = Field(default="server_vad", alias="VOICE_CHAT_REALTIME_VAD_TYPE")
     voice_chat_realtime_vad_threshold: float = Field(default=0.5, alias="VOICE_CHAT_REALTIME_VAD_THRESHOLD")
