@@ -105,32 +105,14 @@ class VoiceChatService:
                 error=str(exc),
             )
             raise
-        is_connected = voice_client.is_connected()
         logger.info(
             "voice_connect_succeeded",
             guild_id=guild.id,
             channel_id=voice_channel.id,
             channel_type=type(voice_channel).__name__,
             voice_client_channel_id=getattr(getattr(voice_client, "channel", None), "id", None),
-            is_connected=is_connected,
+            is_connected=voice_client.is_connected(),
         )
-        if not is_connected:
-            logger.error(
-                "voice_connect_unusable_client",
-                guild_id=guild.id,
-                channel_id=voice_channel.id,
-                channel_type=type(voice_channel).__name__,
-            )
-            try:
-                await voice_client.disconnect(force=True)
-            except Exception as exc:
-                logger.warning(
-                    "voice_connect_cleanup_failed",
-                    guild_id=guild.id,
-                    channel_id=voice_channel.id,
-                    error=str(exc),
-                )
-            return "Failed to establish a usable Discord voice connection. The Discord voice handshake closed before audio listening could start."
         session = VoiceSession(
             guild_id=guild.id,
             channel_id=voice_channel.id,
