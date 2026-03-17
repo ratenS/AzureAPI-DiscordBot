@@ -20,6 +20,8 @@ from app.services.video_service import VideoService
 
 logger = structlog.get_logger(__name__)
 
+DISCORD_MESSAGE_CHAR_LIMIT = 2000
+
 
 class AzureDiscordBot(commands.Bot):
     def __init__(
@@ -102,15 +104,36 @@ class AzureDiscordBot(commands.Bot):
                 memories = self.memory_service.get_relevant_memories(session, scope)
 
             reply = await self.chat_service.generate_reply(prompt, recent_turns, memories)
-            sent_reply = await message.reply(reply)
+            logger.info(
+                "chat_reply_pre_send",
+                reply_length=len(reply),
+                prompt_length=len(prompt),
+                recent_turn_count=len(recent_turns),
+                memory_count=len(memories),
+                message_id=message.id,
+                channel_id=message.channel.id,
+                guild_id=message.guild.id if message.guild else None,
+            )
+            reply_parts = _split_discord_message(reply)
+            sent_messages: list[discord.Message] = [await message.reply(reply_parts[0])]
+            for reply_part in reply_parts[1:]:
+                sent_messages.append(await message.channel.send(reply_part))
 
             with self.database.session() as session:
-                self.memory_service.persist_assistant_message(session, scope, reply, sent_reply.id, {})
+                for sent_message, reply_part in zip(sent_messages, reply_parts):
+                    self.memory_service.persist_assistant_message(session, scope, reply_part, sent_message.id, {})
                 self.memory_service.maybe_extract_memories(session, scope, prompt)
         except RateLimitExceeded:
             await message.reply("Rate limit exceeded. Please wait a minute and try again.")
         except Exception as exc:
-            logger.exception("chat_request_failed", error=str(exc))
+            logger.exception(
+                "chat_request_failed",
+                error=str(exc),
+                prompt_length=len(prompt),
+                message_id=message.id,
+                channel_id=message.channel.id,
+                guild_id=message.guild.id if message.guild else None,
+            )
             await message.reply("The bot failed to process the request.")
 
     def _resolve_scope(self, message: discord.Message) -> ScopeRef:
@@ -421,14 +444,29 @@ class BotAdminGroup:
             return
 
         scope = self.bot._resolve_interaction_scope(interaction)
+        logger.info(
+            "bot_admin_delete_latest_requested",
+            user_id=interaction.user.id,
+            scope_type=scope.scope_type.value,
+            guild_id=scope.guild_id,
+            channel_id=scope.channel_id,
+            thread_id=scope.thread_id,
+            dm_user_id=scope.dm_user_id,
+        )
         with self.bot.database.session() as session:
             record = self.bot.memory_service.get_latest_assistant_message(session, scope)
 
         if record is None:
+            logger.info("bot_admin_delete_latest_no_record", scope_type=scope.scope_type.value)
             await interaction.response.send_message("No bot chat messages were found for this scope.", ephemeral=True)
             return
 
-        outcome = await self._delete_bot_message_for_scope(interaction, scope, record.discord_message_id)
+        logger.info(
+            "bot_admin_delete_latest_found_record",
+            discord_message_id=record.discord_message_id,
+            content_length=len(record.content),
+        )
+        outcome = await self._delete_message_group_for_scope(interaction, scope, record.discord_message_id)
         await interaction.response.send_message(outcome, ephemeral=True)
 
     async def delete_message(self, interaction: discord.Interaction, message_id: str) -> None:
@@ -439,12 +477,67 @@ class BotAdminGroup:
         try:
             target_message_id = int(message_id)
         except ValueError:
+            logger.info("bot_admin_delete_message_invalid_id", raw_message_id=message_id, user_id=interaction.user.id)
             await interaction.response.send_message("Message ID must be a numeric Discord message ID.", ephemeral=True)
             return
 
         scope = self.bot._resolve_interaction_scope(interaction)
+        logger.info(
+            "bot_admin_delete_message_requested",
+            user_id=interaction.user.id,
+            target_message_id=target_message_id,
+            scope_type=scope.scope_type.value,
+            guild_id=scope.guild_id,
+            channel_id=scope.channel_id,
+            thread_id=scope.thread_id,
+            dm_user_id=scope.dm_user_id,
+        )
         outcome = await self._delete_bot_message_for_scope(interaction, scope, target_message_id)
         await interaction.response.send_message(outcome, ephemeral=True)
+
+    async def _delete_message_group_for_scope(
+        self,
+        interaction: discord.Interaction,
+        scope: ScopeRef,
+        latest_discord_message_id: int,
+    ) -> str:
+        channel = interaction.channel
+        if channel is None:
+            return "The command must be used from the channel or thread containing the bot reply."
+
+        deleted_any_discord_message = False
+        deleted_any_record = False
+        deleted_count = 0
+        current_message_id = latest_discord_message_id
+
+        while True:
+            result = await self._delete_bot_message_for_scope(interaction, scope, current_message_id)
+            logger.info(
+                "bot_admin_delete_group_iteration",
+                current_message_id=current_message_id,
+                result=result,
+            )
+
+            if result == "Deleted the bot chat message and removed its stored conversation record.":
+                deleted_any_discord_message = True
+                deleted_any_record = True
+                deleted_count += 1
+            elif result == "The Discord message was already gone, but its stored conversation record was removed.":
+                deleted_any_record = True
+                deleted_count += 1
+            else:
+                break
+
+            previous_message_id = await _find_previous_bot_message_id(channel, current_message_id, self.bot.user.id if self.bot.user else None)
+            if previous_message_id is None:
+                break
+            current_message_id = previous_message_id
+
+        if deleted_any_discord_message and deleted_any_record:
+            return f"Deleted {deleted_count} bot chat message(s) and removed their stored conversation records."
+        if deleted_any_record:
+            return f"The Discord message(s) were already gone, but removed {deleted_count} stored conversation record(s)."
+        return "No stored bot chat matched that message ID in this scope."
 
     async def _delete_bot_message_for_scope(
         self,
@@ -455,6 +548,16 @@ class BotAdminGroup:
         with self.bot.database.session() as session:
             record = self.bot.memory_service.get_assistant_message_by_discord_id(session, scope, discord_message_id)
 
+        logger.info(
+            "bot_admin_delete_message_lookup",
+            scope_type=scope.scope_type.value,
+            guild_id=scope.guild_id,
+            channel_id=scope.channel_id,
+            thread_id=scope.thread_id,
+            dm_user_id=scope.dm_user_id,
+            discord_message_id=discord_message_id,
+            record_found=record is not None,
+        )
         if record is None:
             return "No stored bot chat matched that message ID in this scope."
 
@@ -463,15 +566,25 @@ class BotAdminGroup:
         if channel is not None:
             try:
                 target_message = await channel.fetch_message(discord_message_id)
+                logger.info(
+                    "bot_admin_delete_message_fetched",
+                    fetched_message_author_id=target_message.author.id,
+                    bot_user_id=self.bot.user.id if self.bot.user else None,
+                    channel_id=channel.id,
+                )
                 if self.bot.user is None or target_message.author.id != self.bot.user.id:
                     return "The targeted message is not authored by this bot."
                 await target_message.delete()
                 deleted_discord_message = True
+                logger.info("bot_admin_delete_message_deleted_from_discord", discord_message_id=discord_message_id)
             except discord.NotFound:
+                logger.info("bot_admin_delete_message_not_found_in_discord", discord_message_id=discord_message_id)
                 deleted_discord_message = False
             except discord.Forbidden:
+                logger.warning("bot_admin_delete_message_forbidden", discord_message_id=discord_message_id)
                 return "I do not have permission to delete that Discord message."
-            except discord.HTTPException:
+            except discord.HTTPException as exc:
+                logger.exception("bot_admin_delete_message_http_error", discord_message_id=discord_message_id, error=str(exc))
                 return "Discord rejected the delete request for that message."
 
         with self.bot.database.session() as session:
@@ -481,6 +594,12 @@ class BotAdminGroup:
                 discord_message_id,
             )
 
+        logger.info(
+            "bot_admin_delete_message_record_deleted",
+            discord_message_id=discord_message_id,
+            deleted_record=deleted_record,
+            deleted_discord_message=deleted_discord_message,
+        )
         if deleted_discord_message and deleted_record:
             return "Deleted the bot chat message and removed its stored conversation record."
         if deleted_record:
@@ -492,6 +611,40 @@ class BotAdminGroup:
             "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image, /video, /speech, /memory inspect, /bot delete-latest, and /bot delete-message.",
             ephemeral=True,
         )
+
+
+def _split_discord_message(content: str, limit: int = DISCORD_MESSAGE_CHAR_LIMIT) -> list[str]:
+    if len(content) <= limit:
+        return [content]
+
+    parts: list[str] = []
+    remaining = content
+    while remaining:
+        if len(remaining) <= limit:
+            parts.append(remaining)
+            break
+
+        split_at = remaining.rfind("\n", 0, limit + 1)
+        if split_at <= 0:
+            split_at = remaining.rfind(" ", 0, limit + 1)
+        if split_at <= 0:
+            split_at = limit
+
+        parts.append(remaining[:split_at].rstrip())
+        remaining = remaining[split_at:].lstrip()
+
+    return [part for part in parts if part]
+
+
+async def _find_previous_bot_message_id(channel: discord.abc.Messageable, current_message_id: int, bot_user_id: int | None) -> int | None:
+    if bot_user_id is None or not hasattr(channel, "history"):
+        return None
+
+    async for previous_message in channel.history(limit=10, before=discord.Object(id=current_message_id)):
+        if previous_message.author.id == bot_user_id:
+            return previous_message.id
+        break
+    return None
 
 
 def _resolve_interaction_scope(self: AzureDiscordBot, interaction: discord.Interaction) -> ScopeRef:
