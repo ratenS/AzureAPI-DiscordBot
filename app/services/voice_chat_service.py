@@ -70,12 +70,49 @@ class VoiceChatService:
         scope: ScopeRef,
     ) -> str:
         existing = self._sessions.get(guild.id)
+        guild_voice_client = guild.voice_client
+        logger.info(
+            "voice_join_requested",
+            guild_id=guild.id,
+            channel_id=voice_channel.id,
+            channel_type=type(voice_channel).__name__,
+            text_channel_id=text_channel.id,
+            has_existing_session=existing is not None,
+            existing_session_channel_id=getattr(existing, "channel_id", None),
+            guild_has_voice_client=guild_voice_client is not None,
+            guild_voice_client_channel_id=getattr(getattr(guild_voice_client, "channel", None), "id", None),
+            guild_voice_client_connected=(guild_voice_client.is_connected() if guild_voice_client is not None else None),
+        )
         if existing is not None:
             if existing.channel_id == voice_channel.id:
                 return "Already connected to this voice channel."
             await self.leave(guild.id)
 
-        voice_client = await voice_channel.connect(cls=voice_recv.VoiceRecvClient)
+        logger.info(
+            "voice_connect_attempt",
+            guild_id=guild.id,
+            channel_id=voice_channel.id,
+            channel_type=type(voice_channel).__name__,
+        )
+        try:
+            voice_client = await voice_channel.connect(cls=voice_recv.VoiceRecvClient)
+        except Exception as exc:
+            logger.exception(
+                "voice_connect_failed",
+                guild_id=guild.id,
+                channel_id=voice_channel.id,
+                channel_type=type(voice_channel).__name__,
+                error=str(exc),
+            )
+            raise
+        logger.info(
+            "voice_connect_succeeded",
+            guild_id=guild.id,
+            channel_id=voice_channel.id,
+            channel_type=type(voice_channel).__name__,
+            voice_client_channel_id=getattr(getattr(voice_client, "channel", None), "id", None),
+            is_connected=voice_client.is_connected(),
+        )
         session = VoiceSession(
             guild_id=guild.id,
             channel_id=voice_channel.id,
