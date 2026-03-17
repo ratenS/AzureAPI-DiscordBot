@@ -34,17 +34,6 @@ class Settings(BaseSettings):
     azure_openai_video_download_enabled: bool = Field(default=True, alias="AZURE_OPENAI_VIDEO_DOWNLOAD_ENABLED")
     azure_openai_speech_deployment: str = Field(alias="AZURE_OPENAI_SPEECH_DEPLOYMENT")
     azure_openai_speech_voice: str = Field(default="alloy", alias="AZURE_OPENAI_SPEECH_VOICE")
-    speech_key: str = Field(alias="SPEECH_KEY")
-    speech_region: str = Field(alias="SPEECH_REGION")
-    azure_openai_realtime_deployment: str = Field(alias="AZURE_OPENAI_REALTIME_DEPLOYMENT")
-    voice_chat_realtime_voice: str = Field(default="alloy", alias="VOICE_CHAT_REALTIME_VOICE")
-    voice_chat_realtime_vad_type: str = Field(default="server_vad", alias="VOICE_CHAT_REALTIME_VAD_TYPE")
-    voice_chat_realtime_vad_threshold: float = Field(default=0.5, alias="VOICE_CHAT_REALTIME_VAD_THRESHOLD")
-    voice_chat_realtime_prefix_padding_ms: int = Field(default=300, alias="VOICE_CHAT_REALTIME_PREFIX_PADDING_MS")
-    voice_chat_realtime_silence_duration_ms: int = Field(default=200, alias="VOICE_CHAT_REALTIME_SILENCE_DURATION_MS")
-    voice_chat_realtime_chunk_ms: int = Field(default=100, alias="VOICE_CHAT_REALTIME_CHUNK_MS")
-    voice_chat_realtime_sample_rate: int = Field(default=24000, alias="VOICE_CHAT_REALTIME_SAMPLE_RATE")
-    voice_chat_stop_phrases_raw: str = Field(default="stop,goodbye", alias="VOICE_CHAT_STOP_PHRASES")
 
     allow_dms: bool = Field(default=True, alias="ALLOW_DMS")
     default_raw_log_retention_days: int = Field(default=30, alias="DEFAULT_RAW_LOG_RETENTION_DAYS")
@@ -62,14 +51,6 @@ class Settings(BaseSettings):
         if not self.discord_admin_user_ids_raw.strip():
             return []
         return [int(item.strip()) for item in self.discord_admin_user_ids_raw.split(",") if item.strip()]
-
-    @property
-    def voice_chat_stop_phrases(self) -> set[str]:
-        return {
-            item.strip().lower()
-            for item in self.voice_chat_stop_phrases_raw.split(",")
-            if item.strip()
-        }
 
 
 @lru_cache(maxsize=1)

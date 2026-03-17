@@ -1,6 +1,6 @@
 # Azure OpenAI Discord Bot
 
-Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like experience with scoped memory, image generation, video generation, speech generation, and Discord voice-channel speech-to-speech.
+Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like experience with scoped memory, image generation, video generation, and speech generation.
 
 ## Features
 - Mention-based chat in approved guild channels
@@ -11,7 +11,6 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 - Image generation with metadata persistence
 - Video generation with Azure OpenAI Sora-style job polling, direct MP4 download when available, Discord attachment delivery, and metadata persistence
 - Speech generation with metadata persistence
-- Admin-triggered Discord voice-channel join, leave, status, and continuous speech-to-speech replies powered by Azure OpenAI Realtime API
 - PostgreSQL persistence with `pgvector`
 - Health endpoints for container readiness and liveness
 
@@ -41,8 +40,8 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 1. Copy [`.env.example`](.env.example) to [`.env`](.env.example).
 2. Fill in the Discord and Azure OpenAI credentials.
 3. Set [`DISCORD_ADMIN_USER_IDS`](.env.example) to one or more comma-separated Discord user IDs.
-4. Configure [`AZURE_OPENAI_IMAGE_DEPLOYMENT`](.env.example), [`AZURE_OPENAI_VIDEO_DEPLOYMENT`](.env.example), [`AZURE_OPENAI_SPEECH_DEPLOYMENT`](.env.example), [`AZURE_OPENAI_REALTIME_DEPLOYMENT`](.env.example), [`SPEECH_KEY`](.env.example), and [`SPEECH_REGION`](.env.example).
-5. Adjust [`AZURE_OPENAI_SPEECH_VOICE`](.env.example), [`VOICE_CHAT_REALTIME_VOICE`](.env.example), [`VOICE_CHAT_REALTIME_VAD_TYPE`](.env.example), [`BOT_PERSONA`](.env.example), and [`SYSTEM_PROMPT_BASE`](.env.example) as needed.
+4. Configure [`AZURE_OPENAI_IMAGE_DEPLOYMENT`](.env.example), [`AZURE_OPENAI_VIDEO_DEPLOYMENT`](.env.example), and [`AZURE_OPENAI_SPEECH_DEPLOYMENT`](.env.example).
+5. Adjust [`AZURE_OPENAI_SPEECH_VOICE`](.env.example), [`BOT_PERSONA`](.env.example), and [`SYSTEM_PROMPT_BASE`](.env.example) as needed.
 
 ## Build and publish image with GitHub Actions
 A GitHub Actions workflow at [`.github/workflows/docker.yml`](.github/workflows/docker.yml) builds this image automatically.
@@ -114,12 +113,6 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Install notes for voice support:
-- [`PyNaCl`](requirements.txt) is now required so Discord voice support initializes without the `PyNaCl is not installed` warning.
-- [`ffmpeg`](Dockerfile) is required for playback in voice channels.
-- The project now depends on Azure Speech SDK credentials via [`SPEECH_KEY`](.env.example) and [`SPEECH_REGION`](.env.example) for [`/speech`](app/discord_client.py).
-- Discord voice-chat sessions use Azure OpenAI Realtime API over WebSocket and require [`AZURE_OPENAI_REALTIME_DEPLOYMENT`](.env.example) plus the Realtime-capable OpenAI client from [`requirements.txt`](requirements.txt).
-
 ### 3. Start PostgreSQL separately
 Use [`docker-compose.yml`](docker-compose.yml) or your own PostgreSQL instance with `pgvector` enabled.
 
@@ -143,9 +136,6 @@ python -m app.main
   - `/image`
   - `/video`
   - `/speech`
-  - `/voice join`
-  - `/voice leave`
-  - `/voice status`
   - `/memory inspect`
   - `/memory clear`
   - `/memory enable`
@@ -166,7 +156,6 @@ python -m app.main
 - User profile memory toggle commands are stubbed for a later persistence migration.
 - Approved channels and media enablement are controlled through stored scope settings; first-run bootstrap may require inserting initial enabled records.
 - DMs still follow [`ALLOW_DMS`](.env.example) for chat and slash-command media generation.
-- Voice chat requires Discord voice support dependencies from [`requirements.txt`](requirements.txt) and host/container `ffmpeg` availability from [`Dockerfile`](Dockerfile).
 
 ## Recommended next steps
 - Add full embedding generation and vector similarity retrieval in [`app/services/memory_service.py`](app/services/memory_service.py)

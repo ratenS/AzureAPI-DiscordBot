@@ -6,4 +6,3 @@ from app.services.memory_service import MemoryService
 from app.services.rate_limit_service import RateLimitService
 from app.services.speech_service import SpeechService
 from app.services.video_service import VideoService
-from app.services.voice_chat_service import VoiceChatService
