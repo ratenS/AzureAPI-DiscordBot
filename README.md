@@ -119,7 +119,6 @@ Install notes for voice support:
 - [`ffmpeg`](Dockerfile) is required for playback in voice channels.
 - The project now depends on Azure Speech SDK credentials via [`SPEECH_KEY`](.env.example) and [`SPEECH_REGION`](.env.example) for [`/speech`](app/discord_client.py).
 - Discord voice-chat sessions use Azure OpenAI Realtime API over WebSocket and require [`AZURE_OPENAI_REALTIME_DEPLOYMENT`](.env.example) plus the Realtime-capable OpenAI client from [`requirements.txt`](requirements.txt).
-- Voice receive support currently pins [`discord.py==2.4.0`](requirements.txt:1) with [`discord-ext-voice-recv==0.5.2a179`](requirements.txt:2) because the observed handshake path on [`discord.py==2.5.2`](requirements.txt:1) produced Discord voice websocket close code `4006` before the receive client became usable.
 
 ### 3. Start PostgreSQL separately
 Use [`docker-compose.yml`](docker-compose.yml) or your own PostgreSQL instance with `pgvector` enabled.

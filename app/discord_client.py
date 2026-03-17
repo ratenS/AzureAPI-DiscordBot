@@ -41,7 +41,6 @@ class AzureDiscordBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.reactions = True
-        intents.voice_states = True
         super().__init__(command_prefix="!", intents=intents, application_id=int(settings.discord_application_id))
         self.settings = settings
         self.database = database
