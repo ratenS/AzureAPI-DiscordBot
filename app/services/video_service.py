@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from typing import Any, Dict
 
 from openai import AsyncOpenAI
@@ -43,6 +44,9 @@ class VideoService:
             deployment=settings.azure_openai_video_deployment,
             default_size=settings.azure_openai_video_size,
             default_seconds=settings.azure_openai_video_seconds,
+            client_type=type(self._client).__name__,
+            has_videos_api=hasattr(self._client, "videos"),
+            openai_module=type(self._client).__module__,
         )
 
     async def generate_video(
@@ -66,10 +70,15 @@ class VideoService:
             base_url=str(getattr(self._client, "base_url", "")),
             deployment=self._settings.azure_openai_video_deployment,
             request_body=request_body,
+            client_type=type(self._client).__name__,
+            has_videos_api=hasattr(self._client, "videos"),
+            available_media_apis=sorted(
+                name for name in ("audio", "images", "responses", "videos") if hasattr(self._client, name)
+            ),
         )
 
         try:
-            video = await self._client.videos.create(**request_body)
+            video = await self._create_video(request_body)
             result = await self._poll_video_completion(video.id, prompt=prompt, size=size, seconds=seconds)
         except Exception as exc:
             error_message = self._friendly_error_message(exc)
@@ -116,6 +125,37 @@ class VideoService:
             result=result,
         )
         return result
+
+    async def _create_video(self, request_body: Dict[str, Any]) -> Any:
+        videos_api = getattr(self._client, "videos", None)
+        if videos_api is None:
+            raise RuntimeError(
+                "The installed OpenAI Python SDK does not expose client.videos. Upgrade the 'openai' package to a newer release."
+            )
+
+        create_and_poll = getattr(videos_api, "create_and_poll", None)
+        if callable(create_and_poll):
+            logger.info("video_generation_create_and_poll_supported")
+            video = create_and_poll(**request_body)
+            if inspect.isawaitable(video):
+                video = await video
+            status = getattr(video, "status", None)
+            if status == "completed":
+                return video
+            if status in {"failed", "cancelled"}:
+                raise RuntimeError(self._extract_error_message(video) or f"Video generation ended with status '{status}'.")
+            return video
+
+        logger.info("video_generation_create_and_poll_unavailable_falling_back_to_create")
+        create = getattr(videos_api, "create", None)
+        if not callable(create):
+            raise RuntimeError(
+                "The installed OpenAI Python SDK does not expose a supported video creation method. Upgrade the 'openai' package to a newer release."
+            )
+        video = create(**request_body)
+        if inspect.isawaitable(video):
+            return await video
+        return video
 
     async def _poll_video_completion(self, video_id: str, prompt: str, size: str, seconds: int) -> VideoGenerationResult:
         latest_video = None
