@@ -24,7 +24,7 @@ services:
     env_file:
       - .env
     depends_on:
-      postgres:
+      azure-discord-postgres:
         condition: service_healthy
     ports:
       - "8080:8080"

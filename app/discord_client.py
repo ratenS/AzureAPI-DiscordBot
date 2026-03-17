@@ -158,9 +158,18 @@ class AzureDiscordBot(commands.Bot):
 
     async def _handle_chat_message(self, message: discord.Message, prompt: str) -> None:
         scope = self._resolve_scope(message)
-        if not self._is_scope_enabled(scope):
-            await message.reply("This bot is not enabled for this channel or scope.")
-            return
+        memory_enabled = True
+        if scope.scope_type == ScopeType.DM:
+            if not self.settings.allow_dms:
+                await message.reply("This bot is not enabled for this channel or scope.")
+                return
+        else:
+            with self.database.session() as session:
+                scope_settings = self.memory_service.get_scope_settings(session, scope)
+            if not bool(scope_settings.get("bot_enabled", False)):
+                await message.reply("This bot is not enabled for this channel or scope.")
+                return
+            memory_enabled = bool(scope_settings.get("memory_enabled", True))
 
         if len(prompt) > self.settings.max_prompt_chars:
             await message.reply("Prompt too long. Please shorten your message.")
@@ -172,16 +181,20 @@ class AzureDiscordBot(commands.Bot):
                 self.rate_limit_service.check(f"guild:{message.guild.id}")
 
             with self.database.session() as session:
-                self.memory_service.persist_user_message(
-                    session,
-                    scope,
-                    message.author.id,
-                    prompt,
-                    message.id,
-                    {},
-                )
-                recent_turns = self.memory_service.get_recent_turns(session, scope)
-                memories = self.memory_service.get_relevant_memories(session, scope)
+                if memory_enabled:
+                    self.memory_service.persist_user_message(
+                        session,
+                        scope,
+                        message.author.id,
+                        prompt,
+                        message.id,
+                        {},
+                    )
+                    recent_turns = self.memory_service.get_recent_turns(session, scope)
+                    memories = self.memory_service.get_relevant_memories(session, scope)
+                else:
+                    recent_turns = []
+                    memories = []
 
             reply = await self.chat_service.generate_reply(prompt, recent_turns, memories)
             logger.info(
@@ -200,9 +213,10 @@ class AzureDiscordBot(commands.Bot):
                 sent_messages.append(await message.channel.send(reply_part))
 
             with self.database.session() as session:
-                for sent_message, reply_part in zip(sent_messages, reply_parts):
-                    self.memory_service.persist_assistant_message(session, scope, reply_part, sent_message.id, {})
-                self.memory_service.maybe_extract_memories(session, scope, prompt)
+                if memory_enabled:
+                    for sent_message, reply_part in zip(sent_messages, reply_parts):
+                        self.memory_service.persist_assistant_message(session, scope, reply_part, sent_message.id, {})
+                    self.memory_service.maybe_extract_memories(session, scope, prompt)
         except RateLimitExceeded:
             await message.reply("Rate limit exceeded. Please wait a minute and try again.")
         except Exception as exc:
@@ -234,14 +248,6 @@ class AzureDiscordBot(commands.Bot):
             guild_id=message.guild.id if message.guild else None,
             channel_id=message.channel.id,
         )
-
-    def _is_scope_enabled(self, scope: ScopeRef) -> bool:
-        if scope.scope_type == ScopeType.DM:
-            return self.settings.allow_dms
-
-        with self.database.session() as session:
-            settings = self.memory_service.get_scope_settings(session, scope)
-            return bool(settings.get("bot_enabled", False))
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.settings.discord_admin_user_ids
@@ -773,7 +779,6 @@ async def _find_previous_bot_message_id(channel: discord.abc.Messageable, curren
     async for previous_message in channel.history(limit=10, before=discord.Object(id=current_message_id)):
         if previous_message.author.id == bot_user_id:
             return previous_message.id
-        break
     return None
 
 

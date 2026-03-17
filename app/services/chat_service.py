@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from openai import AsyncAzureOpenAI
 
 from app.config import Settings
@@ -20,8 +18,8 @@ class ChatService:
     async def generate_reply(
         self,
         prompt: str,
-        recent_turns: List[ConversationTurn],
-        memories: List[MemoryRecord],
+        recent_turns: list[ConversationTurn],
+        memories: list[MemoryRecord],
     ) -> str:
         history = [{"role": turn.role, "content": turn.content} for turn in recent_turns]
         memory_text = "\n".join(f"- [{memory.memory_kind.value}] {memory.memory_text}" for memory in memories) or "None"
@@ -41,4 +39,12 @@ class ChatService:
             messages=messages,
             temperature=0.7,
         )
-        return response.choices[0].message.content or "I could not generate a response."
+        if not response.choices:
+            return "I could not generate a response."
+
+        content = response.choices[0].message.content
+        if isinstance(content, str):
+            content = content.strip()
+            if content:
+                return content
+        return "I could not generate a response."

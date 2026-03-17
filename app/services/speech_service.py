@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any, Dict
 
@@ -36,6 +37,10 @@ class SpeechService:
                 input=text,
             )
             audio_bytes = response.read()
+            if inspect.isawaitable(audio_bytes):
+                audio_bytes = await audio_bytes
+            if not isinstance(audio_bytes, bytes) or not audio_bytes:
+                raise RuntimeError("Speech generation returned no audio bytes.")
         except Exception:
             self._repository.persist_speech_generation(
                 session=session,
