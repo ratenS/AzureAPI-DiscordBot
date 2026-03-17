@@ -102,12 +102,11 @@ class AzureDiscordBot(commands.Bot):
                 memories = self.memory_service.get_relevant_memories(session, scope)
 
             reply = await self.chat_service.generate_reply(prompt, recent_turns, memories)
+            sent_reply = await message.reply(reply)
 
             with self.database.session() as session:
-                self.memory_service.persist_assistant_message(session, scope, reply, {})
+                self.memory_service.persist_assistant_message(session, scope, reply, sent_reply.id, {})
                 self.memory_service.maybe_extract_memories(session, scope, prompt)
-
-            await message.reply(reply)
         except RateLimitExceeded:
             await message.reply("Rate limit exceeded. Please wait a minute and try again.")
         except Exception as exc:
@@ -332,6 +331,8 @@ class BotAdminGroup:
         self.group.command(name="disable-video", description="Disable video generation in this scope.")(self.disable_video)
         self.group.command(name="enable-speech", description="Enable speech generation in this scope.")(self.enable_speech)
         self.group.command(name="disable-speech", description="Disable speech generation in this scope.")(self.disable_speech)
+        self.group.command(name="delete-latest", description="Delete the latest bot chat in this scope.")(self.delete_latest)
+        self.group.command(name="delete-message", description="Delete a specific bot chat message by Discord message ID.")(self.delete_message)
         self.group.command(name="help", description="Show usage details.")(self.help)
 
     async def enable_channel(self, interaction: discord.Interaction) -> None:
@@ -414,9 +415,81 @@ class BotAdminGroup:
             self.bot.memory_service.set_scope_speech_enabled(session, scope, False)
         await interaction.response.send_message("Speech generation disabled for this scope.", ephemeral=True)
 
+    async def delete_latest(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            record = self.bot.memory_service.get_latest_assistant_message(session, scope)
+
+        if record is None:
+            await interaction.response.send_message("No bot chat messages were found for this scope.", ephemeral=True)
+            return
+
+        outcome = await self._delete_bot_message_for_scope(interaction, scope, record.discord_message_id)
+        await interaction.response.send_message(outcome, ephemeral=True)
+
+    async def delete_message(self, interaction: discord.Interaction, message_id: str) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        try:
+            target_message_id = int(message_id)
+        except ValueError:
+            await interaction.response.send_message("Message ID must be a numeric Discord message ID.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        outcome = await self._delete_bot_message_for_scope(interaction, scope, target_message_id)
+        await interaction.response.send_message(outcome, ephemeral=True)
+
+    async def _delete_bot_message_for_scope(
+        self,
+        interaction: discord.Interaction,
+        scope: ScopeRef,
+        discord_message_id: int,
+    ) -> str:
+        with self.bot.database.session() as session:
+            record = self.bot.memory_service.get_assistant_message_by_discord_id(session, scope, discord_message_id)
+
+        if record is None:
+            return "No stored bot chat matched that message ID in this scope."
+
+        channel = interaction.channel
+        deleted_discord_message = False
+        if channel is not None:
+            try:
+                target_message = await channel.fetch_message(discord_message_id)
+                if self.bot.user is None or target_message.author.id != self.bot.user.id:
+                    return "The targeted message is not authored by this bot."
+                await target_message.delete()
+                deleted_discord_message = True
+            except discord.NotFound:
+                deleted_discord_message = False
+            except discord.Forbidden:
+                return "I do not have permission to delete that Discord message."
+            except discord.HTTPException:
+                return "Discord rejected the delete request for that message."
+
+        with self.bot.database.session() as session:
+            deleted_record = self.bot.memory_service.delete_assistant_message_by_discord_id(
+                session,
+                scope,
+                discord_message_id,
+            )
+
+        if deleted_discord_message and deleted_record:
+            return "Deleted the bot chat message and removed its stored conversation record."
+        if deleted_record:
+            return "The Discord message was already gone, but its stored conversation record was removed."
+        return "No stored bot chat matched that message ID in this scope."
+
     async def help(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
-            "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image, /video, /speech, and /memory inspect.",
+            "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image, /video, /speech, /memory inspect, /bot delete-latest, and /bot delete-message.",
             ephemeral=True,
         )
 

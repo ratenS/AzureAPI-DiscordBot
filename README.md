@@ -7,7 +7,7 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 - Direct message chat support
 - Isolated memory per channel, thread, and DM scope
 - Optional long-term memory extraction using simple heuristics
-- Admin memory inspection, clearing, and toggling
+- Admin memory inspection, clearing, toggling, and bot chat deletion
 - Image generation with metadata persistence
 - Video generation with Azure OpenAI Sora-style job polling, direct MP4 download when available, Discord attachment delivery, and metadata persistence
 - Speech generation with metadata persistence
@@ -148,6 +148,8 @@ python -m app.main
   - `/bot disable-video`
   - `/bot enable-speech`
   - `/bot disable-speech`
+  - `/bot delete-latest`
+  - `/bot delete-message`
 
 ## Notes and current v1 limitations
 - Embedding persistence schema is prepared, but semantic vector search is currently scaffolded and not yet fully implemented.

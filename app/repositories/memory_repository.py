@@ -334,6 +334,97 @@ class MemoryRepository:
 
         return dict(row) if row else {}
 
+    def fetch_latest_assistant_message(self, session: Session, scope: ScopeRef) -> Dict[str, Any] | None:
+        row = session.execute(
+            text(
+                """
+                SELECT discord_message_id, content
+                FROM conversation_messages
+                WHERE scope_type = :scope_type
+                  AND guild_id IS NOT DISTINCT FROM :guild_id
+                  AND channel_id IS NOT DISTINCT FROM :channel_id
+                  AND thread_id IS NOT DISTINCT FROM :thread_id
+                  AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
+                  AND role = 'assistant'
+                  AND discord_message_id IS NOT NULL
+                ORDER BY created_at DESC, discord_message_id DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "scope_type": scope.scope_type.value,
+                "guild_id": scope.guild_id,
+                "channel_id": scope.channel_id,
+                "thread_id": scope.thread_id,
+                "dm_user_id": scope.dm_user_id,
+            },
+        ).mappings().first()
+
+        return dict(row) if row else None
+
+    def fetch_assistant_message_by_discord_id(
+        self,
+        session: Session,
+        scope: ScopeRef,
+        discord_message_id: int,
+    ) -> Dict[str, Any] | None:
+        row = session.execute(
+            text(
+                """
+                SELECT discord_message_id, content
+                FROM conversation_messages
+                WHERE scope_type = :scope_type
+                  AND guild_id IS NOT DISTINCT FROM :guild_id
+                  AND channel_id IS NOT DISTINCT FROM :channel_id
+                  AND thread_id IS NOT DISTINCT FROM :thread_id
+                  AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
+                  AND role = 'assistant'
+                  AND discord_message_id = :discord_message_id
+                LIMIT 1
+                """
+            ),
+            {
+                "scope_type": scope.scope_type.value,
+                "guild_id": scope.guild_id,
+                "channel_id": scope.channel_id,
+                "thread_id": scope.thread_id,
+                "dm_user_id": scope.dm_user_id,
+                "discord_message_id": discord_message_id,
+            },
+        ).mappings().first()
+
+        return dict(row) if row else None
+
+    def delete_assistant_message_by_discord_id(
+        self,
+        session: Session,
+        scope: ScopeRef,
+        discord_message_id: int,
+    ) -> bool:
+        result = session.execute(
+            text(
+                """
+                DELETE FROM conversation_messages
+                WHERE scope_type = :scope_type
+                  AND guild_id IS NOT DISTINCT FROM :guild_id
+                  AND channel_id IS NOT DISTINCT FROM :channel_id
+                  AND thread_id IS NOT DISTINCT FROM :thread_id
+                  AND dm_user_id IS NOT DISTINCT FROM :dm_user_id
+                  AND role = 'assistant'
+                  AND discord_message_id = :discord_message_id
+                """
+            ),
+            {
+                "scope_type": scope.scope_type.value,
+                "guild_id": scope.guild_id,
+                "channel_id": scope.channel_id,
+                "thread_id": scope.thread_id,
+                "dm_user_id": scope.dm_user_id,
+                "discord_message_id": discord_message_id,
+            },
+        )
+        return bool(result.rowcount)
+
     def persist_image_generation(
         self,
         session: Session,

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
 
 from app.models import ConversationTurn, MemoryKind, MemoryRecord, ScopeRef
 from app.repositories.memory_repository import MemoryRepository
+
+
+@dataclass(slots=True)
+class AssistantMessageRecord:
+    discord_message_id: int
+    content: str
 
 
 class MemoryService:
@@ -42,6 +49,7 @@ class MemoryService:
         session: Session,
         scope: ScopeRef,
         content: str,
+        discord_message_id: int,
         moderation_result: Dict[str, Any],
     ) -> None:
         self._repository.persist_message(
@@ -50,7 +58,7 @@ class MemoryService:
             author_user_id=0,
             role="assistant",
             content=content,
-            discord_message_id=None,
+            discord_message_id=discord_message_id,
             moderation_result=moderation_result,
             retention_days=self._retention_days,
         )
@@ -60,6 +68,26 @@ class MemoryService:
 
     def get_relevant_memories(self, session: Session, scope: ScopeRef) -> List[MemoryRecord]:
         return self._repository.fetch_relevant_memories(session, scope)
+
+    def get_latest_assistant_message(self, session: Session, scope: ScopeRef) -> AssistantMessageRecord | None:
+        row = self._repository.fetch_latest_assistant_message(session, scope)
+        if row is None:
+            return None
+        return AssistantMessageRecord(discord_message_id=row["discord_message_id"], content=row["content"])
+
+    def get_assistant_message_by_discord_id(
+        self,
+        session: Session,
+        scope: ScopeRef,
+        discord_message_id: int,
+    ) -> AssistantMessageRecord | None:
+        row = self._repository.fetch_assistant_message_by_discord_id(session, scope, discord_message_id)
+        if row is None:
+            return None
+        return AssistantMessageRecord(discord_message_id=row["discord_message_id"], content=row["content"])
+
+    def delete_assistant_message_by_discord_id(self, session: Session, scope: ScopeRef, discord_message_id: int) -> bool:
+        return self._repository.delete_assistant_message_by_discord_id(session, scope, discord_message_id)
 
     def maybe_extract_memories(self, session: Session, scope: ScopeRef, content: str) -> None:
         if not self._sync_heuristics_enabled:
