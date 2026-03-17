@@ -17,6 +17,7 @@ from app.services.memory_service import MemoryService
 from app.services.rate_limit_service import RateLimitExceeded, RateLimitService
 from app.services.speech_service import SpeechService
 from app.services.video_service import VideoService
+from app.services.voice_chat_service import VoiceChatService
 
 logger = structlog.get_logger(__name__)
 
@@ -33,6 +34,7 @@ class AzureDiscordBot(commands.Bot):
         image_service: ImageService,
         video_service: VideoService,
         speech_service: SpeechService,
+        voice_chat_service: VoiceChatService,
         memory_service: MemoryService,
         rate_limit_service: RateLimitService,
     ) -> None:
@@ -46,6 +48,7 @@ class AzureDiscordBot(commands.Bot):
         self.image_service = image_service
         self.video_service = video_service
         self.speech_service = speech_service
+        self.voice_chat_service = voice_chat_service
         self.memory_service = memory_service
         self.rate_limit_service = rate_limit_service
 
@@ -53,6 +56,7 @@ class AzureDiscordBot(commands.Bot):
         self.tree.add_command(ImageCommand(self).command)
         self.tree.add_command(VideoCommand(self).command)
         self.tree.add_command(SpeechCommand(self).command)
+        self.tree.add_command(VoiceGroup(self).group)
         self.tree.add_command(MemoryGroup(self).group)
         self.tree.add_command(ProfileGroup(self).group)
         self.tree.add_command(BotAdminGroup(self).group)
@@ -364,6 +368,70 @@ class SpeechCommand:
             await interaction.followup.send("Speech generation failed.")
 
 
+class VoiceGroup:
+    def __init__(self, bot: AzureDiscordBot) -> None:
+        self.bot = bot
+        self.group = app_commands.Group(name="voice", description="Manage voice-channel speech chat.")
+        self.group.command(name="join", description="Join your current voice channel and start listening.")(self.join)
+        self.group.command(name="leave", description="Leave the current voice channel.")(self.leave)
+        self.group.command(name="status", description="Show current voice session status.")(self.status)
+
+    async def join(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        if interaction.guild is None or interaction.channel is None:
+            await interaction.response.send_message("This command must be used in a server text channel.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        if not self.bot._is_speech_allowed(scope):
+            await interaction.response.send_message("Speech generation is not enabled for this scope.", ephemeral=True)
+            return
+
+        if not isinstance(interaction.user, discord.Member) or interaction.user.voice is None or interaction.user.voice.channel is None:
+            await interaction.response.send_message("Join a voice channel first, then run this command.", ephemeral=True)
+            return
+
+        if not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+            await interaction.response.send_message("This command must be used from a text channel or thread.", ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        message = await self.bot.voice_chat_service.join(
+            guild=interaction.guild,
+            voice_channel=interaction.user.voice.channel,
+            text_channel=interaction.channel,
+            scope=scope,
+        )
+        await interaction.followup.send(message, ephemeral=True)
+
+    async def leave(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        if interaction.guild is None:
+            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        message = await self.bot.voice_chat_service.leave(interaction.guild.id)
+        await interaction.followup.send(message, ephemeral=True)
+
+    async def status(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        if interaction.guild is None:
+            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            return
+
+        await interaction.response.send_message(self.bot.voice_chat_service.get_status(interaction.guild.id), ephemeral=True)
+
+
 class MemoryGroup:
     def __init__(self, bot: AzureDiscordBot) -> None:
         self.bot = bot
@@ -640,7 +708,7 @@ class BotAdminGroup:
 
     async def help(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
-            "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image, /video, /speech, /memory inspect, /bot delete-latest, and /bot delete-message.",
+            "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image, /video, /speech, /voice join, /voice leave, /voice status, /memory inspect, /bot delete-latest, and /bot delete-message.",
             ephemeral=True,
         )
 

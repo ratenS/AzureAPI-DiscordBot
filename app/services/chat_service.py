@@ -23,7 +23,15 @@ class ChatService:
     ) -> str:
         history = [{"role": turn.role, "content": turn.content} for turn in recent_turns]
         memory_text = "\n".join(f"- [{memory.memory_kind.value}] {memory.memory_text}" for memory in memories) or "None"
-        messages = [
+        messages = self._build_messages(prompt, history, memory_text)
+        return await self._complete(messages)
+
+    async def generate_reply_with_history(self, prompt: str, history: list[dict[str, str]]) -> str:
+        messages = self._build_messages(prompt, history, "None")
+        return await self._complete(messages)
+
+    def _build_messages(self, prompt: str, history: list[dict[str, str]], memory_text: str) -> list[dict[str, str]]:
+        return [
             {"role": "system", "content": self._settings.system_prompt_base},
             {"role": "system", "content": self._settings.bot_persona},
             {
@@ -34,6 +42,7 @@ class ChatService:
             {"role": "user", "content": prompt},
         ]
 
+    async def _complete(self, messages: list[dict[str, str]]) -> str:
         response = await self._client.chat.completions.create(
             model=self._settings.azure_openai_chat_deployment,
             messages=messages,

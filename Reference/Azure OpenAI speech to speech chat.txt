@@ -1,0 +1,640 @@
+---
+layout: Conceptual
+title: Azure OpenAI speech to speech chat - Speech service - Foundry Tools | Microsoft Learn
+canonicalUrl: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/openai-speech
+breadcrumb_path: ../../breadcrumb/azure-ai/toc.json
+feedback_help_link_url: https://learn.microsoft.com/answers/tags/55/azure-speech/
+feedback_help_link_type: get-help-at-qna
+feedback_product_url: https://feedback.azure.com/d365community/forum/09041fae-0b25-ec11-b6e6-000d3a4f0858?c=21041fae-0b25-ec11-b6e6-000d3a4f0858
+feedback_system: Standard
+permissioned-type: public
+recommendations: true
+recommendation_types:
+- Training
+- Certification
+uhfHeaderId: azure-ai-foundry
+ms.suite: office
+zone_pivot_group_filename: zone-pivots/azure-ai/zone-pivot-groups.json
+author: PatrickFarley
+learn_banner_products:
+- azure
+manager: nitinme
+ms.author: pafarley
+ms.collection: ce-skilling-ai-copilot
+ms.update-cycle: 180-days
+ms.service: azure-ai-speech
+description: In this how-to guide, use Speech to converse with Azure OpenAI. Speech recognizes audio, sends it to Azure OpenAI, and synthesizes speech responses.
+ms.custom: build-2023, build-2023-dataai, devx-track-python
+ms.topic: how-to
+ms.date: 2026-02-25T00:00:00.0000000Z
+zone_pivot_groups: programming-languages-csharp-python
+keywords: speech to text, openai
+locale: en-us
+document_id: 1370a1c1-3686-3810-ccd2-648780aa69c9
+document_version_independent_id: 93ff06b1-e74b-f680-18f9-d9b8dd283e24
+updated_at: 2026-02-28T06:12:00.0000000Z
+original_content_git_url: https://github.com/MicrosoftDocs/azure-ai-docs-pr/blob/live/articles/ai-services/speech-service/openai-speech.md
+gitcommit: https://github.com/MicrosoftDocs/azure-ai-docs-pr/blob/50e04238b91f05b8715442b41e16a00ce7858064/articles/ai-services/speech-service/openai-speech.md
+git_commit_id: 50e04238b91f05b8715442b41e16a00ce7858064
+site_name: Docs
+depot_name: Learn.azure-ai
+page_type: conceptual
+toc_rel: toc.json
+word_count: 3613
+asset_id: ai-services/speech-service/openai-speech
+moniker_range_name: 
+monikers: []
+item_type: Content
+source_path: articles/ai-services/speech-service/openai-speech.md
+cmProducts:
+- https://microsoft-devrel.poolparty.biz/DevRelOfferingOntology/8a6e4dad-7050-4ce7-83f9-eb4123577a54
+- https://authoring-docs-microsoft.poolparty.biz/devrel/a8711e05-df51-442a-970f-935304535b39
+spProducts:
+- https://microsoft-devrel.poolparty.biz/DevRelOfferingOntology/0a5fc323-00ce-4c20-9095-41948f54c83f
+- https://authoring-docs-microsoft.poolparty.biz/devrel/3d3c20d8-79ed-4203-aee0-ffb9c9bafe72
+platformId: 561276d7-b84d-59c5-db35-7250c29c82c0
+---
+
+# Azure OpenAI speech to speech chat - Speech service - Foundry Tools | Microsoft Learn
+
+::: zone pivot="programming-language-csharp"
+
+[Reference documentation](/en-us/dotnet/api/microsoft.cognitiveservices.speech) | [Package (NuGet)](https://www.nuget.org/packages/Microsoft.CognitiveServices.Speech) | [Additional samples on GitHub](https://aka.ms/speech/github-csharp)
+
+In this how-to guide, you can use Azure Speech in Foundry Tools to converse with Azure OpenAI in Microsoft Foundry Models. The text recognized by the Speech service is sent to Azure OpenAI. The Speech service synthesizes speech from the text response from Azure OpenAI.
+
+Speak into the microphone to start a conversation with Azure OpenAI.
+
+- The Speech service recognizes your speech and converts it into text (speech to text).
+- Your request as text is sent to Azure OpenAI.
+- The Speech service text to speech feature synthesizes the response from Azure OpenAI to the default speaker.
+
+Although the experience of this example is a back-and-forth exchange, Azure OpenAI doesn't remember the context of your conversation.
+
+## Prerequisites
+
+- Azure subscription - [Create one for free](https://azure.microsoft.com/pricing/purchase-options/azure-account?cid=msft_learn)
+- [Create a Microsoft Azure OpenAI in Microsoft Foundry Models resource](https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI) in the Azure portal.
+- Deploy a [model](/en-us/azure/ai-foundry/openai/concepts/models) in your Azure OpenAI resource. For more information about model deployment, see the Azure OpenAI [resource deployment guide](/en-us/azure/ai-foundry/openai/how-to/create-resource).
+- Get the Azure OpenAI resource key and endpoint. After your Azure OpenAI resource is deployed, select **Go to resource** to view and manage keys.
+- [Create a Foundry resource for Speech](https://portal.azure.com/#create/Microsoft.CognitiveServicesAIFoundry) in the Azure portal.
+- Get the Speech resource key and region. After your Speech resource is deployed, select **Go to resource** to view and manage keys.
+
+## Set up the environment
+
+The Speech SDK is available as a [NuGet package](https://www.nuget.org/packages/Microsoft.CognitiveServices.Speech) and implements .NET Standard 2.0. You install the Speech SDK later in this guide, but first check the [SDK installation guide](quickstarts/setup-platform?pivots=programming-language-csharp) for any more requirements.
+
+### Set environment variables
+
+This example requires environment variables named `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `SPEECH_KEY`, and `SPEECH_REGION`.
+
+Your application must be authenticated to access Microsoft Foundry resources. This article shows you how to use environment variables to store your credentials. You can then access the environment variables from your code to authenticate your application. For production, use a more secure way to store and access your credentials.
+
+Important
+
+We recommend Microsoft Entra ID authentication with [managed identities for Azure resources](/en-us/azure/active-directory/managed-identities-azure-resources/overview) to avoid storing credentials with your applications that run in the cloud.
+
+Use API keys with caution. Don't include the API key directly in your code, and never post it publicly. If using API keys, store them securely in Azure Key Vault, rotate the keys regularly, and restrict access to Azure Key Vault using role based access control and network access restrictions. For more information about using API keys securely in your apps, see [API keys with Azure Key Vault](/en-us/azure/key-vault/general/apps-api-keys-secrets).
+
+For more information about AI services security, see [Authenticate requests to Azure AI services](/en-us/azure/ai-services/authentication).
+
+To set the environment variables, open a console window, and follow the instructions for your operating system and development environment.
+
+- To set the `AZURE_OPENAI_API_KEY` environment variable, replace `your-openai-key` with one of the keys for your resource.
+- To set the `AZURE_OPENAI_ENDPOINT` environment variable, replace `your-openai-endpoint` with one of the regions for your resource.
+- To set the `AZURE_OPENAI_CHAT_DEPLOYMENT` environment variable, replace `your-openai-deployment-name` with one of the regions for your resource.
+- To set the `SPEECH_KEY` environment variable, replace `your-speech-key` with one of the keys for your resource.
+- To set the `SPEECH_REGION` environment variable, replace `your-speech-region` with one of the regions for your resource.
+
+# [Windows](#tab/windows)
+```console
+setx AZURE_OPENAI_API_KEY your-openai-key
+setx AZURE_OPENAI_ENDPOINT your-openai-endpoint
+setx AZURE_OPENAI_CHAT_DEPLOYMENT your-openai-deployment-name
+setx SPEECH_KEY your-speech-key
+setx SPEECH_REGION your-speech-region
+```
+
+Note
+
+If you only need to access the environment variable in the current running console, set the environment variable with `set` instead of `setx`.
+
+After you add the environment variables, you might need to restart any running programs that need to read the environment variable, including the console window. For example, if Visual Studio is your editor, restart Visual Studio before running the example.
+
+# [Linux](#tab/linux)
+```bash
+export AZURE_OPENAI_API_KEY=your-openai-key
+export AZURE_OPENAI_ENDPOINT=your-openai-endpoint
+export AZURE_OPENAI_CHAT_DEPLOYMENT=your-openai-deployment-name
+export SPEECH_KEY=your-speech-key
+export SPEECH_REGION=your-speech-region
+```
+
+After you add the environment variables, run `source ~/.bashrc` from your console window to make the changes effective.
+
+# [macOS](#tab/macos)
+##### Bash
+
+Edit your *.bash\_profile*, and add the environment variables:
+
+```bash
+export AZURE_OPENAI_API_KEY=your-openai-key
+export AZURE_OPENAI_ENDPOINT=your-openai-endpoint
+export AZURE_OPENAI_CHAT_DEPLOYMENT=your-openai-deployment-name # For example, "gpt-4o-mini"
+export SPEECH_KEY=your-speech-key
+export SPEECH_REGION=your-speech-region
+```
+
+After you add the environment variables, run `source ~/.bash_profile` from your console window to make the changes effective.
+
+##### Xcode
+
+For iOS and macOS development, set the environment variables in Xcode. For example, follow these steps to set the environment variable in Xcode 13.4.1.
+
+1. Select **Product** &gt; **Scheme** &gt; **Edit scheme**.
+2. Select **Arguments** on the **Run** (Debug Run) page.
+3. Under **Environment Variables** select the plus (+) sign to add a new environment variable.
+4. Enter `SPEECH_KEY` for the **Name** and enter your Speech resource key for the **Value**.
+
+Repeat the steps to set other required environment variables.
+
+For more configuration options, see the [Xcode documentation](https://help.apple.com/xcode/#/dev745c5c974).
+
+---
+
+## Recognize speech from a microphone
+
+Follow these steps to create a new console application.
+
+1. Open a command prompt window in the folder where you want the new project. Run this command to create a console application with the .NET CLI.
+
+    ```dotnetcli
+    dotnet new console
+    ```
+
+    The command creates a *Program.cs* file in the project directory.
+2. Install the Speech SDK in your new project with the .NET CLI.
+
+    ```dotnetcli
+    dotnet add package Microsoft.CognitiveServices.Speech
+    ```
+3. Install the Azure OpenAI SDK (prerelease) in your new project with the .NET CLI.
+
+    ```dotnetcli
+    dotnet add package Azure.AI.OpenAI --prerelease 
+    ```
+4. Replace the contents of `Program.cs` with the following code.
+
+    ```csharp
+    using System.Text;
+    using Microsoft.CognitiveServices.Speech;
+    using Microsoft.CognitiveServices.Speech.Audio;
+    using Azure;
+    using Azure.AI.OpenAI;
+    
+    // This example requires environment variables named "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT" and "AZURE_OPENAI_CHAT_DEPLOYMENT"
+    // Your endpoint should look like the following https://YOUR_OPEN_AI_RESOURCE_NAME.openai.azure.com/
+    string openAIKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ??
+                       throw new ArgumentException("Missing AZURE_OPENAI_API_KEY");
+    string openAIEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ??
+                            throw new ArgumentException("Missing AZURE_OPENAI_ENDPOINT");
+    
+    // Enter the deployment name you chose when you deployed the model.
+    string engine = Environment.GetEnvironmentVariable("AZURE_OPENAI_CHAT_DEPLOYMENT") ??
+                    throw new ArgumentException("Missing AZURE_OPENAI_CHAT_DEPLOYMENT");
+    
+    // This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
+    string speechKey = Environment.GetEnvironmentVariable("SPEECH_KEY") ??
+                       throw new ArgumentException("Missing SPEECH_KEY");
+    string speechRegion = Environment.GetEnvironmentVariable("SPEECH_REGION") ??
+                          throw new ArgumentException("Missing SPEECH_REGION");
+    
+    // Sentence end symbols for splitting the response into sentences.
+    List<string> sentenceSaperators = new() { ".", "!", "?", ";", "。", "！", "？", "；", "\n" };
+    
+    try
+    {
+        await ChatWithAzureOpenAI();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
+    }
+    
+    // Prompts Azure OpenAI with a request and synthesizes the response.
+    async Task AskAzureOpenAI(string prompt)
+    {
+        object consoleLock = new();
+        var speechConfig = SpeechConfig.FromSubscription(speechKey, speechRegion);
+    
+        // The language of the voice that speaks.
+        speechConfig.SpeechSynthesisVoiceName = "en-US-JennyMultilingualNeural";
+        var audioOutputConfig = AudioConfig.FromDefaultSpeakerOutput();
+        using var speechSynthesizer = new SpeechSynthesizer(speechConfig, audioOutputConfig);
+        speechSynthesizer.Synthesizing += (sender, args) =>
+        {
+            lock (consoleLock)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write($"[Audio]");
+                Console.ResetColor();
+            }
+        };
+    
+        // Ask Azure OpenAI
+        OpenAIClient client = new(new Uri(openAIEndpoint), new AzureKeyCredential(openAIKey));
+        var completionsOptions = new ChatCompletionsOptions()
+        {
+            DeploymentName = engine,
+            Messages = { new ChatRequestUserMessage(prompt) },
+            MaxTokens = 100,
+        };
+        var responseStream = await client.GetChatCompletionsStreamingAsync(completionsOptions);
+    
+        StringBuilder gptBuffer = new();
+        await foreach (var completionUpdate in responseStream)
+        {
+            var message = completionUpdate.ContentUpdate;
+            if (string.IsNullOrEmpty(message))
+            {
+                continue;
+            }
+    
+            lock (consoleLock)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkBlue;
+                Console.Write($"{message}");
+                Console.ResetColor();
+            }
+    
+            gptBuffer.Append(message);
+    
+            if (sentenceSaperators.Any(message.Contains))
+            {
+                var sentence = gptBuffer.ToString().Trim();
+                if (!string.IsNullOrEmpty(sentence))
+                {
+                    await speechSynthesizer.SpeakTextAsync(sentence);
+                    gptBuffer.Clear();
+                }
+            }
+        }
+    }
+    
+    // Continuously listens for speech input to recognize and send as text to Azure OpenAI
+    async Task ChatWithAzureOpenAI()
+    {
+        // Should be the locale for the speaker's language.
+        var speechConfig = SpeechConfig.FromSubscription(speechKey, speechRegion);
+        speechConfig.SpeechRecognitionLanguage = "en-US";
+    
+        using var audioConfig = AudioConfig.FromDefaultMicrophoneInput();
+        using var speechRecognizer = new SpeechRecognizer(speechConfig, audioConfig);
+        var conversationEnded = false;
+    
+        while (!conversationEnded)
+        {
+            Console.WriteLine("Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.");
+    
+            // Get audio from the microphone and then send it to the TTS service.
+            var speechRecognitionResult = await speechRecognizer.RecognizeOnceAsync();
+    
+            switch (speechRecognitionResult.Reason)
+            {
+                case ResultReason.RecognizedSpeech:
+                    if (speechRecognitionResult.Text == "Stop.")
+                    {
+                        Console.WriteLine("Conversation ended.");
+                        conversationEnded = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Recognized speech: {speechRecognitionResult.Text}");
+                        await AskAzureOpenAI(speechRecognitionResult.Text);
+                    }
+    
+                    break;
+                case ResultReason.NoMatch:
+                    Console.WriteLine($"No speech could be recognized: ");
+                    break;
+                case ResultReason.Canceled:
+                    var cancellationDetails = CancellationDetails.FromResult(speechRecognitionResult);
+                    Console.WriteLine($"Speech Recognition canceled: {cancellationDetails.Reason}");
+                    if (cancellationDetails.Reason == CancellationReason.Error)
+                    {
+                        Console.WriteLine($"Error details={cancellationDetails.ErrorDetails}");
+                    }
+    
+                    break;
+            }
+        }
+    }
+    ```
+5. To increase or decrease the number of tokens returned by Azure OpenAI, change the `MaxTokens` property in the `ChatCompletionsOptions` class instance. For more information tokens and cost implications, see [Azure OpenAI tokens](/en-us/azure/ai-foundry/openai/overview#tokens) and [Azure OpenAI pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/).
+6. Run your new console application to start speech recognition from a microphone:
+
+    ```console
+    dotnet run
+    ```
+
+Important
+
+Make sure that you set the `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `SPEECH_KEY` and `SPEECH_REGION`environment variables as described. If you don't set these variables, the sample will fail with an error message.
+
+Speak into your microphone when prompted. The console output includes the prompt for you to begin speaking, then your request as text, and then the response from Azure OpenAI as text. The response from Azure OpenAI should be converted from text to speech and then output to the default speaker.
+
+```console
+PS C:\dev\openai\csharp> dotnet run
+Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.
+Recognized speech:Make a comma separated list of all continents.
+Azure OpenAI response:Africa, Antarctica, Asia, Australia, Europe, North America, South America
+Speech synthesized to speaker for text [Africa, Antarctica, Asia, Australia, Europe, North America, South America]
+Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.
+Recognized speech: Make a comma separated list of 1 Astronomical observatory for each continent. A list should include each continent name in parentheses.
+Azure OpenAI response:Mauna Kea Observatories (North America), La Silla Observatory (South America), Tenerife Observatory (Europe), Siding Spring Observatory (Australia), Beijing Xinglong Observatory (Asia), Naukluft Plateau Observatory (Africa), Rutherford Appleton Laboratory (Antarctica)
+Speech synthesized to speaker for text [Mauna Kea Observatories (North America), La Silla Observatory (South America), Tenerife Observatory (Europe), Siding Spring Observatory (Australia), Beijing Xinglong Observatory (Asia), Naukluft Plateau Observatory (Africa), Rutherford Appleton Laboratory (Antarctica)]
+Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.
+Conversation ended.
+PS C:\dev\openai\csharp>
+```
+
+## Remarks
+
+Here are some more considerations:
+
+- To change the speech recognition language, replace `en-US` with another [supported language](language-support?tabs=tts). For example, `es-ES` for Spanish (Spain). The default language is `en-US`. For details about how to identify one of multiple languages that might be spoken, see [language identification](language-identification).
+- To change the voice that you hear, replace `en-US-JennyMultilingualNeural` with another [supported voice](language-support?tabs=tts#standard-voices). If the voice doesn't speak the language of the text returned from Azure OpenAI, the Speech service doesn't output synthesized audio.
+- To reduce latency for text to speech output, use the text streaming feature, which enables real-time text processing for fast audio generation and minimizes latency, enhancing the fluidity and responsiveness of real-time audio outputs. Refer to [how to use text streaming](how-to-lower-speech-synthesis-latency#input-text-streaming).
+- To enable [TTS Avatar](text-to-speech-avatar/what-is-text-to-speech-avatar) as a visual experience of speech output, refer to [real-time synthesis for text to speech avatar](text-to-speech-avatar/real-time-synthesis-avatar) and [sample code](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/samples/js/browser/avatar#chat-sample) for chat scenario with avatar.
+- Azure OpenAI also performs content moderation on the prompt inputs and generated outputs. The prompts or responses might be filtered if harmful content is detected. For more information, see the [content filtering](/en-us/azure/ai-foundry/openai/concepts/content-filter) article.
+
+## Clean up resources
+
+You can use the [Azure portal](../multi-service-resource?pivots=azportal#clean-up-resources) or [Azure Command Line Interface (CLI)](../multi-service-resource?pivots=azcli#clean-up-resources) to remove the Speech resource you created.
+
+::: zone-end
+
+::: zone pivot="programming-language-python"
+
+[Reference documentation](/en-us/python/api/azure-cognitiveservices-speech/) | [Package (PyPi)](https://pypi.org/project/azure-cognitiveservices-speech/) | [Additional samples on GitHub](https://aka.ms/speech/github-python)
+
+In this how-to guide, you can use Azure Speech in Foundry Tools to converse with Azure OpenAI in Microsoft Foundry Models. The text recognized by the Speech service is sent to Azure OpenAI. The Speech service synthesizes speech from the text response from Azure OpenAI.
+
+Speak into the microphone to start a conversation with Azure OpenAI.
+
+- The Speech service recognizes your speech and converts it into text (speech to text).
+- Your request as text is sent to Azure OpenAI.
+- The Speech service text to speech feature synthesizes the response from Azure OpenAI to the default speaker.
+
+Although the experience of this example is a back-and-forth exchange, Azure OpenAI doesn't remember the context of your conversation.
+
+## Prerequisites
+
+- Azure subscription - [Create one for free](https://azure.microsoft.com/pricing/purchase-options/azure-account?cid=msft_learn)
+- [Create a Microsoft Azure OpenAI in Microsoft Foundry Models resource](https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI) in the Azure portal.
+- Deploy a [model](/en-us/azure/ai-foundry/openai/concepts/models) in your Azure OpenAI resource. For more information about model deployment, see the Azure OpenAI [resource deployment guide](/en-us/azure/ai-foundry/openai/how-to/create-resource).
+- Get the Azure OpenAI resource key and endpoint. After your Azure OpenAI resource is deployed, select **Go to resource** to view and manage keys.
+- [Create a Foundry resource for Speech](https://portal.azure.com/#create/Microsoft.CognitiveServicesAIFoundry) in the Azure portal.
+- Get the Speech resource key and region. After your Speech resource is deployed, select **Go to resource** to view and manage keys.
+
+## Set up the environment
+
+The Speech SDK for Python is available as a [Python Package Index (PyPI) module](https://pypi.org/project/azure-cognitiveservices-speech/). The Speech SDK for Python is compatible with Windows, Linux, and macOS.
+
+- Install the [Microsoft Visual C++ Redistributable for Visual Studio 2015, 2017, 2019, and 2022](/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170&amp;preserve-view=true) for your platform. Installing this package for the first time might require a restart.
+- On Linux, you must use the x64 target architecture.
+
+Install a version of [Python from 3.7 or later](https://www.python.org/downloads/). First check the [SDK installation guide](quickstarts/setup-platform?pivots=programming-language-python) for any more requirements.
+
+Install the following Python libraries: `os`, `requests`, `json`.
+
+### Set environment variables
+
+This example requires environment variables named `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `SPEECH_KEY`, and `SPEECH_REGION`.
+
+Your application must be authenticated to access Microsoft Foundry resources. This article shows you how to use environment variables to store your credentials. You can then access the environment variables from your code to authenticate your application. For production, use a more secure way to store and access your credentials.
+
+Important
+
+We recommend Microsoft Entra ID authentication with [managed identities for Azure resources](/en-us/azure/active-directory/managed-identities-azure-resources/overview) to avoid storing credentials with your applications that run in the cloud.
+
+Use API keys with caution. Don't include the API key directly in your code, and never post it publicly. If using API keys, store them securely in Azure Key Vault, rotate the keys regularly, and restrict access to Azure Key Vault using role based access control and network access restrictions. For more information about using API keys securely in your apps, see [API keys with Azure Key Vault](/en-us/azure/key-vault/general/apps-api-keys-secrets).
+
+For more information about AI services security, see [Authenticate requests to Azure AI services](/en-us/azure/ai-services/authentication).
+
+To set the environment variables, open a console window, and follow the instructions for your operating system and development environment.
+
+- To set the `AZURE_OPENAI_API_KEY` environment variable, replace `your-openai-key` with one of the keys for your resource.
+- To set the `AZURE_OPENAI_ENDPOINT` environment variable, replace `your-openai-endpoint` with one of the regions for your resource.
+- To set the `AZURE_OPENAI_CHAT_DEPLOYMENT` environment variable, replace `your-openai-deployment-name` with one of the regions for your resource.
+- To set the `SPEECH_KEY` environment variable, replace `your-speech-key` with one of the keys for your resource.
+- To set the `SPEECH_REGION` environment variable, replace `your-speech-region` with one of the regions for your resource.
+
+# [Windows](#tab/windows)
+```console
+setx AZURE_OPENAI_API_KEY your-openai-key
+setx AZURE_OPENAI_ENDPOINT your-openai-endpoint
+setx AZURE_OPENAI_CHAT_DEPLOYMENT your-openai-deployment-name
+setx SPEECH_KEY your-speech-key
+setx SPEECH_REGION your-speech-region
+```
+
+Note
+
+If you only need to access the environment variable in the current running console, set the environment variable with `set` instead of `setx`.
+
+After you add the environment variables, you might need to restart any running programs that need to read the environment variable, including the console window. For example, if Visual Studio is your editor, restart Visual Studio before running the example.
+
+# [Linux](#tab/linux)
+```bash
+export AZURE_OPENAI_API_KEY=your-openai-key
+export AZURE_OPENAI_ENDPOINT=your-openai-endpoint
+export AZURE_OPENAI_CHAT_DEPLOYMENT=your-openai-deployment-name
+export SPEECH_KEY=your-speech-key
+export SPEECH_REGION=your-speech-region
+```
+
+After you add the environment variables, run `source ~/.bashrc` from your console window to make the changes effective.
+
+# [macOS](#tab/macos)
+##### Bash
+
+Edit your *.bash\_profile*, and add the environment variables:
+
+```bash
+export AZURE_OPENAI_API_KEY=your-openai-key
+export AZURE_OPENAI_ENDPOINT=your-openai-endpoint
+export AZURE_OPENAI_CHAT_DEPLOYMENT=your-openai-deployment-name # For example, "gpt-4o-mini"
+export SPEECH_KEY=your-speech-key
+export SPEECH_REGION=your-speech-region
+```
+
+After you add the environment variables, run `source ~/.bash_profile` from your console window to make the changes effective.
+
+##### Xcode
+
+For iOS and macOS development, set the environment variables in Xcode. For example, follow these steps to set the environment variable in Xcode 13.4.1.
+
+1. Select **Product** &gt; **Scheme** &gt; **Edit scheme**.
+2. Select **Arguments** on the **Run** (Debug Run) page.
+3. Under **Environment Variables** select the plus (+) sign to add a new environment variable.
+4. Enter `SPEECH_KEY` for the **Name** and enter your Speech resource key for the **Value**.
+
+Repeat the steps to set other required environment variables.
+
+For more configuration options, see the [Xcode documentation](https://help.apple.com/xcode/#/dev745c5c974).
+
+---
+
+## Recognize speech from a microphone
+
+Follow these steps to create a new console application.
+
+1. Open a command prompt window in the folder where you want the new project. Open a command prompt where you want the new project, and create a new file named `azure-openai-speech.py`.
+2. Run this command to install the Speech SDK:
+
+    ```console
+    pip install azure-cognitiveservices-speech
+    ```
+3. Run this command to install the OpenAI SDK:
+
+    ```console
+    pip install openai
+    ```
+
+    Note
+
+    This library is maintained by OpenAI, not Microsoft Azure. Refer to the [release history](https://github.com/openai/openai-python/releases) or the [version.py commit history](https://github.com/openai/openai-python/commits/main/openai/version.py) to track the latest updates to the library.
+4. Create a file named *azure-openai-speech.py*. Copy the following code into that file:
+
+    ```Python
+    import os
+    import azure.cognitiveservices.speech as speechsdk
+    from openai import AzureOpenAI
+    
+    # This example requires environment variables named "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT" and "AZURE_OPENAI_CHAT_DEPLOYMENT"
+    # Your endpoint should look like the following https://YOUR_OPEN_AI_RESOURCE_NAME.openai.azure.com/
+    client = AzureOpenAI(
+    azure_endpoint=os.environ.get('AZURE_OPENAI_ENDPOINT'),
+    api_key=os.environ.get('AZURE_OPENAI_API_KEY'),
+    api_version="2023-05-15"
+    )
+    
+    # This will correspond to the custom name you chose for your deployment when you deployed a model.
+    deployment_id=os.environ.get('AZURE_OPENAI_CHAT_DEPLOYMENT')
+    
+    # This example requires environment variables named "SPEECH_KEY" and "SPEECH_REGION"
+    speech_config = speechsdk.SpeechConfig(subscription=os.environ.get('SPEECH_KEY'), region=os.environ.get('SPEECH_REGION'))
+    audio_output_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
+    audio_config = speechsdk.audio.AudioConfig(use_default_microphone=True)
+    
+    # Should be the locale for the speaker's language.
+    speech_config.speech_recognition_language="en-US"
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    
+    # The language of the voice that responds on behalf of Azure OpenAI.
+    speech_config.speech_synthesis_voice_name='en-US-JennyMultilingualNeural'
+    speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_output_config)
+    # tts sentence end mark
+    tts_sentence_end = [ ".", "!", "?", ";", "。", "！", "？", "；", "\n" ]
+    
+    # Prompts Azure OpenAI with a request and synthesizes the response.
+    def ask_azure_openai(prompt):
+        # Ask Azure OpenAI in streaming way
+        response = client.chat.completions.create(model=deployment_id, max_tokens=200, stream=True, messages=[
+            {"role": "user", "content": prompt}
+        ])
+        collected_messages = []
+        last_tts_request = None
+    
+        # iterate through the stream response stream
+        for chunk in response:
+            if len(chunk.choices) > 0:
+                chunk_message = chunk.choices[0].delta.content  # extract the message
+                if chunk_message is not None:
+                    collected_messages.append(chunk_message)  # save the message
+                    if chunk_message in tts_sentence_end: # sentence end found
+                        text = ''.join(collected_messages).strip() # join the received message together to build a sentence
+                        if text != '': # if sentence only have \n or space, we could skip
+                            print(f"Speech synthesized to speaker for: {text}")
+                            last_tts_request = speech_synthesizer.speak_text_async(text)
+                            collected_messages.clear()
+        if last_tts_request:
+            last_tts_request.get()
+    
+    # Continuously listens for speech input to recognize and send as text to Azure OpenAI
+    def chat_with_azure_openai():
+        while True:
+            print("Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.")
+            try:
+                # Get audio from the microphone and then send it to the TTS service.
+                speech_recognition_result = speech_recognizer.recognize_once_async().get()
+    
+                # If speech is recognized, send it to Azure OpenAI and listen for the response.
+                if speech_recognition_result.reason == speechsdk.ResultReason.RecognizedSpeech:
+                    if speech_recognition_result.text == "Stop.": 
+                        print("Conversation ended.")
+                        break
+                    print("Recognized speech: {}".format(speech_recognition_result.text))
+                    ask_azure_openai(speech_recognition_result.text)
+                elif speech_recognition_result.reason == speechsdk.ResultReason.NoMatch:
+                    print("No speech could be recognized: {}".format(speech_recognition_result.no_match_details))
+                    break
+                elif speech_recognition_result.reason == speechsdk.ResultReason.Canceled:
+                    cancellation_details = speech_recognition_result.cancellation_details
+                    print("Speech Recognition canceled: {}".format(cancellation_details.reason))
+                    if cancellation_details.reason == speechsdk.CancellationReason.Error:
+                        print("Error details: {}".format(cancellation_details.error_details))
+            except EOFError:
+                break
+    
+    # Main
+    
+    try:
+        chat_with_azure_openai()
+    except Exception as err:
+        print("Encountered exception. {}".format(err))
+    ```
+5. To increase or decrease the number of tokens returned by Azure OpenAI, change the `max_tokens` parameter. For more information tokens and cost implications, see [Azure OpenAI tokens](/en-us/azure/ai-foundry/openai/overview#tokens) and [Azure OpenAI pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/).
+6. Run your new console application to start speech recognition from a microphone:
+
+    ```console
+    python azure-openai-speech.py
+    ```
+
+Important
+
+Make sure that you set the `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `SPEECH_KEY` and `SPEECH_REGION` environment variables as described previously. If you don't set these variables, the sample will fail with an error message.
+
+Speak into your microphone when prompted. The console output includes the prompt for you to begin speaking, then your request as text, and then the response from Azure OpenAI as text. The response from Azure OpenAI should be converted from text to speech and then output to the default speaker.
+
+```console
+PS C:\dev\openai\python> python.exe .\azure-openai-speech.py
+Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.
+Recognized speech:Make a comma separated list of all continents.
+Azure OpenAI response:Africa, Antarctica, Asia, Australia, Europe, North America, South America
+Speech synthesized to speaker for text [Africa, Antarctica, Asia, Australia, Europe, North America, South America]
+Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.
+Recognized speech: Make a comma separated list of 1 Astronomical observatory for each continent. A list should include each continent name in parentheses.
+Azure OpenAI response:Mauna Kea Observatories (North America), La Silla Observatory (South America), Tenerife Observatory (Europe), Siding Spring Observatory (Australia), Beijing Xinglong Observatory (Asia), Naukluft Plateau Observatory (Africa), Rutherford Appleton Laboratory (Antarctica)
+Speech synthesized to speaker for text [Mauna Kea Observatories (North America), La Silla Observatory (South America), Tenerife Observatory (Europe), Siding Spring Observatory (Australia), Beijing Xinglong Observatory (Asia), Naukluft Plateau Observatory (Africa), Rutherford Appleton Laboratory (Antarctica)]
+Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the conversation.
+Conversation ended.
+PS C:\dev\openai\python> 
+```
+
+## Remarks
+
+Here are some more considerations:
+
+- To change the speech recognition language, replace `en-US` with another [supported language](language-support). For example, `es-ES` for Spanish (Spain). The default language is `en-US`. For details about how to identify one of multiple languages that might be spoken, see [language identification](language-identification).
+- To change the voice that you hear, replace `en-US-JennyMultilingualNeural` with another [supported voice](language-support#standard-voices). If the voice doesn't speak the language of the text returned from Azure OpenAI, the Speech service doesn't output synthesized audio.
+- To reduce latency for text to speech output, use the text streaming feature, which enables real-time text processing for fast audio generation and minimizes latency, enhancing the fluidity and responsiveness of real-time audio outputs. Refer to [how to use text streaming](how-to-lower-speech-synthesis-latency#input-text-streaming).
+- To enable [TTS Avatar](text-to-speech-avatar/what-is-text-to-speech-avatar) as a visual experience of speech output, refer to [real-time synthesis for text to speech avatar](text-to-speech-avatar/real-time-synthesis-avatar) and [sample code](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/samples/js/browser/avatar#chat-sample) for chat scenario with avatar.
+- Azure OpenAI also performs content moderation on the prompt inputs and generated outputs. The prompts or responses might be filtered if harmful content is detected. For more information, see the [content filtering](/en-us/azure/ai-foundry/openai/concepts/content-filter) article.
+
+## Clean up resources
+
+You can use the [Azure portal](../multi-service-resource?pivots=azportal#clean-up-resources) or [Azure Command Line Interface (CLI)](../multi-service-resource?pivots=azcli#clean-up-resources) to remove the Speech resource you created.
+
+::: zone-end
