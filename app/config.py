@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     azure_openai_chat_deployment: str = Field(alias="AZURE_OPENAI_CHAT_DEPLOYMENT")
     azure_openai_embedding_deployment: str = Field(alias="AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
     azure_openai_image_deployment: str = Field(alias="AZURE_OPENAI_IMAGE_DEPLOYMENT")
+    azure_openai_video_deployment: str = Field(alias="AZURE_OPENAI_VIDEO_DEPLOYMENT")
+    azure_openai_speech_deployment: str = Field(alias="AZURE_OPENAI_SPEECH_DEPLOYMENT")
+    azure_openai_speech_voice: str = Field(default="alloy", alias="AZURE_OPENAI_SPEECH_VOICE")
 
     allow_dms: bool = Field(default=True, alias="ALLOW_DMS")
     default_raw_log_retention_days: int = Field(default=30, alias="DEFAULT_RAW_LOG_RETENTION_DAYS")

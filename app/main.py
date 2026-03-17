@@ -16,6 +16,8 @@ from app.services.chat_service import ChatService
 from app.services.image_service import ImageService
 from app.services.memory_service import MemoryService
 from app.services.rate_limit_service import RateLimitService
+from app.services.speech_service import SpeechService
+from app.services.video_service import VideoService
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -31,11 +33,15 @@ memory_service = MemoryService(
 chat_service = ChatService(settings)
 rate_limit_service = RateLimitService(settings.rate_limit_requests_per_minute)
 image_service = ImageService(settings, repository)
+video_service = VideoService(settings, repository)
+speech_service = SpeechService(settings, repository)
 discord_bot = AzureDiscordBot(
     settings=settings,
     database=database,
     chat_service=chat_service,
     image_service=image_service,
+    video_service=video_service,
+    speech_service=speech_service,
     memory_service=memory_service,
     rate_limit_service=rate_limit_service,
 )

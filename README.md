@@ -1,6 +1,6 @@
 # Azure OpenAI Discord Bot
 
-Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like experience with scoped memory and image generation.
+Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like experience with scoped memory, image generation, video generation, and speech generation.
 
 ## Features
 - Mention-based chat in approved guild channels
@@ -9,6 +9,8 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 - Optional long-term memory extraction using simple heuristics
 - Admin memory inspection, clearing, and toggling
 - Image generation with metadata persistence
+- Video generation with metadata persistence
+- Speech generation with metadata persistence
 - PostgreSQL persistence with `pgvector`
 - Health endpoints for container readiness and liveness
 
@@ -18,6 +20,8 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 - [`app/config.py`](app/config.py)
 - [`app/services/chat_service.py`](app/services/chat_service.py)
 - [`app/services/image_service.py`](app/services/image_service.py)
+- [`app/services/video_service.py`](app/services/video_service.py)
+- [`app/services/speech_service.py`](app/services/speech_service.py)
 - [`app/services/memory_service.py`](app/services/memory_service.py)
 - [`app/services/rate_limit_service.py`](app/services/rate_limit_service.py)
 - [`app/repositories/memory_repository.py`](app/repositories/memory_repository.py)
@@ -30,13 +34,14 @@ Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like 
 ## Prerequisites
 - Docker Engine with Compose support
 - Discord bot application and token
-- Azure OpenAI resource with deployed chat, embedding, and image models
+- Azure OpenAI resource with deployed chat, embedding, image, video, and speech models
 
 ## Configuration
 1. Copy [`.env.example`](.env.example) to [`.env`](.env.example).
 2. Fill in the Discord and Azure OpenAI credentials.
 3. Set [`DISCORD_ADMIN_USER_IDS`](.env.example) to one or more comma-separated Discord user IDs.
-4. Adjust [`BOT_PERSONA`](.env.example) and [`SYSTEM_PROMPT_BASE`](.env.example) as needed.
+4. Configure [`AZURE_OPENAI_IMAGE_DEPLOYMENT`](.env.example), [`AZURE_OPENAI_VIDEO_DEPLOYMENT`](.env.example), and [`AZURE_OPENAI_SPEECH_DEPLOYMENT`](.env.example).
+5. Adjust [`AZURE_OPENAI_SPEECH_VOICE`](.env.example), [`BOT_PERSONA`](.env.example), and [`SYSTEM_PROMPT_BASE`](.env.example) as needed.
 
 ## Build and publish image with GitHub Actions
 A GitHub Actions workflow at [`.github/workflows/docker.yml`](.github/workflows/docker.yml) builds this image automatically.
@@ -128,18 +133,26 @@ python -m app.main
 - In DMs, send messages directly.
 - Use slash commands such as:
   - `/image`
+  - `/video`
+  - `/speech`
   - `/memory inspect`
   - `/memory clear`
   - `/memory enable`
   - `/memory disable`
   - `/bot enable-channel`
   - `/bot disable-channel`
+  - `/bot enable-image`
+  - `/bot disable-image`
+  - `/bot enable-video`
+  - `/bot disable-video`
+  - `/bot enable-speech`
+  - `/bot disable-speech`
 
 ## Notes and current v1 limitations
 - Embedding persistence schema is prepared, but semantic vector search is currently scaffolded and not yet fully implemented.
 - User profile memory toggle commands are stubbed for a later persistence migration.
-- Approved channels and image enablement are controlled through stored scope settings; first-run bootstrap may require inserting initial enabled records.
-- Media generation is limited to images in v1.
+- Approved channels and media enablement are controlled through stored scope settings; first-run bootstrap may require inserting initial enabled records.
+- DMs still follow [`ALLOW_DMS`](.env.example) for chat and slash-command media generation.
 
 ## Recommended next steps
 - Add full embedding generation and vector similarity retrieval in [`app/services/memory_service.py`](app/services/memory_service.py)

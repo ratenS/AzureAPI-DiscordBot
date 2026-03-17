@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from typing import Optional
 
 import discord
@@ -14,6 +15,8 @@ from app.services.chat_service import ChatService
 from app.services.image_service import ImageService
 from app.services.memory_service import MemoryService
 from app.services.rate_limit_service import RateLimitExceeded, RateLimitService
+from app.services.speech_service import SpeechService
+from app.services.video_service import VideoService
 
 logger = structlog.get_logger(__name__)
 
@@ -25,6 +28,8 @@ class AzureDiscordBot(commands.Bot):
         database: Database,
         chat_service: ChatService,
         image_service: ImageService,
+        video_service: VideoService,
+        speech_service: SpeechService,
         memory_service: MemoryService,
         rate_limit_service: RateLimitService,
     ) -> None:
@@ -35,11 +40,15 @@ class AzureDiscordBot(commands.Bot):
         self.database = database
         self.chat_service = chat_service
         self.image_service = image_service
+        self.video_service = video_service
+        self.speech_service = speech_service
         self.memory_service = memory_service
         self.rate_limit_service = rate_limit_service
 
     async def setup_hook(self) -> None:
         self.tree.add_command(ImageCommand(self).command)
+        self.tree.add_command(VideoCommand(self).command)
+        self.tree.add_command(SpeechCommand(self).command)
         self.tree.add_command(MemoryGroup(self).group)
         self.tree.add_command(ProfileGroup(self).group)
         self.tree.add_command(BotAdminGroup(self).group)
@@ -169,6 +178,75 @@ class ImageCommand:
             await interaction.followup.send("Image generation failed.")
 
 
+class VideoCommand:
+    def __init__(self, bot: AzureDiscordBot) -> None:
+        self.bot = bot
+        self.command = app_commands.Command(
+            name="video",
+            description="Generate a video from a prompt.",
+            callback=self.video,
+        )
+
+    async def video(self, interaction: discord.Interaction, prompt: str) -> None:
+        await interaction.response.defer(thinking=True)
+        scope = self.bot._resolve_interaction_scope(interaction)
+        if not self.bot._is_video_allowed(scope):
+            await interaction.followup.send("Video generation is not enabled for this scope.")
+            return
+
+        try:
+            self.bot.rate_limit_service.check(f"user:{interaction.user.id}:video")
+            with self.bot.database.session() as session:
+                video_result = await self.bot.video_service.generate_video(
+                    session,
+                    scope,
+                    interaction.user.id,
+                    prompt,
+                    {},
+                )
+            await interaction.followup.send(video_result)
+        except RateLimitExceeded:
+            await interaction.followup.send("Rate limit exceeded for video generation.")
+        except Exception as exc:
+            logger.exception("video_generation_failed", error=str(exc))
+            await interaction.followup.send("Video generation failed.")
+
+
+class SpeechCommand:
+    def __init__(self, bot: AzureDiscordBot) -> None:
+        self.bot = bot
+        self.command = app_commands.Command(
+            name="speech",
+            description="Generate speech audio from text.",
+            callback=self.speech,
+        )
+
+    async def speech(self, interaction: discord.Interaction, text: str) -> None:
+        await interaction.response.defer(thinking=True)
+        scope = self.bot._resolve_interaction_scope(interaction)
+        if not self.bot._is_speech_allowed(scope):
+            await interaction.followup.send("Speech generation is not enabled for this scope.")
+            return
+
+        try:
+            self.bot.rate_limit_service.check(f"user:{interaction.user.id}:speech")
+            with self.bot.database.session() as session:
+                file_name, audio_bytes = await self.bot.speech_service.generate_speech(
+                    session,
+                    scope,
+                    interaction.user.id,
+                    text,
+                    {},
+                )
+            audio_file = discord.File(BytesIO(audio_bytes), filename=file_name)
+            await interaction.followup.send(file=audio_file)
+        except RateLimitExceeded:
+            await interaction.followup.send("Rate limit exceeded for speech generation.")
+        except Exception as exc:
+            logger.exception("speech_generation_failed", error=str(exc))
+            await interaction.followup.send("Speech generation failed.")
+
+
 class MemoryGroup:
     def __init__(self, bot: AzureDiscordBot) -> None:
         self.bot = bot
@@ -240,6 +318,12 @@ class BotAdminGroup:
         self.group = app_commands.Group(name="bot", description="Manage bot availability.")
         self.group.command(name="enable-channel", description="Enable the bot in this channel.")(self.enable_channel)
         self.group.command(name="disable-channel", description="Disable the bot in this channel.")(self.disable_channel)
+        self.group.command(name="enable-image", description="Enable image generation in this scope.")(self.enable_image)
+        self.group.command(name="disable-image", description="Disable image generation in this scope.")(self.disable_image)
+        self.group.command(name="enable-video", description="Enable video generation in this scope.")(self.enable_video)
+        self.group.command(name="disable-video", description="Disable video generation in this scope.")(self.disable_video)
+        self.group.command(name="enable-speech", description="Enable speech generation in this scope.")(self.enable_speech)
+        self.group.command(name="disable-speech", description="Disable speech generation in this scope.")(self.disable_speech)
         self.group.command(name="help", description="Show usage details.")(self.help)
 
     async def enable_channel(self, interaction: discord.Interaction) -> None:
@@ -262,9 +346,69 @@ class BotAdminGroup:
             self.bot.memory_service.set_scope_bot_enabled(session, scope, False)
         await interaction.response.send_message("Bot disabled for this scope.", ephemeral=True)
 
+    async def enable_image(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            self.bot.memory_service.set_scope_image_enabled(session, scope, True)
+        await interaction.response.send_message("Image generation enabled for this scope.", ephemeral=True)
+
+    async def disable_image(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            self.bot.memory_service.set_scope_image_enabled(session, scope, False)
+        await interaction.response.send_message("Image generation disabled for this scope.", ephemeral=True)
+
+    async def enable_video(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            self.bot.memory_service.set_scope_video_enabled(session, scope, True)
+        await interaction.response.send_message("Video generation enabled for this scope.", ephemeral=True)
+
+    async def disable_video(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            self.bot.memory_service.set_scope_video_enabled(session, scope, False)
+        await interaction.response.send_message("Video generation disabled for this scope.", ephemeral=True)
+
+    async def enable_speech(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            self.bot.memory_service.set_scope_speech_enabled(session, scope, True)
+        await interaction.response.send_message("Speech generation enabled for this scope.", ephemeral=True)
+
+    async def disable_speech(self, interaction: discord.Interaction) -> None:
+        if not self.bot.is_admin(interaction.user.id):
+            await interaction.response.send_message("Admin access required.", ephemeral=True)
+            return
+
+        scope = self.bot._resolve_interaction_scope(interaction)
+        with self.bot.database.session() as session:
+            self.bot.memory_service.set_scope_speech_enabled(session, scope, False)
+        await interaction.response.send_message("Speech generation disabled for this scope.", ephemeral=True)
+
     async def help(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
-            "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image and /memory inspect.",
+            "Mention the bot in approved channels, send direct messages in DMs, or use slash commands like /image, /video, /speech, and /memory inspect.",
             ephemeral=True,
         )
 
@@ -301,3 +445,27 @@ def _is_image_allowed(self: AzureDiscordBot, scope: ScopeRef) -> bool:
 
 
 AzureDiscordBot._is_image_allowed = _is_image_allowed
+
+
+def _is_video_allowed(self: AzureDiscordBot, scope: ScopeRef) -> bool:
+    if scope.scope_type == ScopeType.DM:
+        return self.settings.allow_dms
+
+    with self.database.session() as session:
+        settings = self.memory_service.get_scope_settings(session, scope)
+        return bool(settings.get("video_enabled", False))
+
+
+AzureDiscordBot._is_video_allowed = _is_video_allowed
+
+
+def _is_speech_allowed(self: AzureDiscordBot, scope: ScopeRef) -> bool:
+    if scope.scope_type == ScopeType.DM:
+        return self.settings.allow_dms
+
+    with self.database.session() as session:
+        settings = self.memory_service.get_scope_settings(session, scope)
+        return bool(settings.get("speech_enabled", False))
+
+
+AzureDiscordBot._is_speech_allowed = _is_speech_allowed

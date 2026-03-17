@@ -1,5 +1,5 @@
 services:
-  postgres:
+  azure-discord-postgres:
     image: pgvector/pgvector:pg16
     container_name: azure-discord-postgres
     environment:
@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   azure-discord-bot:
-    image: ghcr.io/ratenS/azureapi-discordbot:v0.0.1
+    image: ghcr.io/ratenS/azureapi-discordbot:latest
     container_name: azure-discord-bot
     env_file:
       - .env

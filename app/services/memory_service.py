@@ -99,5 +99,14 @@ class MemoryService:
     def set_scope_bot_enabled(self, session: Session, scope: ScopeRef, enabled: bool) -> None:
         self._repository.set_bot_enabled(session, scope, enabled, self._retention_days)
 
+    def set_scope_image_enabled(self, session: Session, scope: ScopeRef, enabled: bool) -> None:
+        self._repository.set_image_enabled(session, scope, enabled, self._retention_days)
+
+    def set_scope_video_enabled(self, session: Session, scope: ScopeRef, enabled: bool) -> None:
+        self._repository.set_video_enabled(session, scope, enabled, self._retention_days)
+
+    def set_scope_speech_enabled(self, session: Session, scope: ScopeRef, enabled: bool) -> None:
+        self._repository.set_speech_enabled(session, scope, enabled, self._retention_days)
+
     def cleanup_expired_messages(self, session: Session) -> None:
         self._repository.cleanup_expired_messages(session)

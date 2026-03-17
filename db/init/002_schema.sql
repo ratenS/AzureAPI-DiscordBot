@@ -55,6 +55,39 @@ CREATE TABLE IF NOT EXISTS image_generations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS video_generations (
+    id BIGSERIAL PRIMARY KEY,
+    scope_type TEXT NOT NULL,
+    guild_id BIGINT NULL,
+    channel_id BIGINT NULL,
+    thread_id BIGINT NULL,
+    dm_user_id BIGINT NULL,
+    requester_user_id BIGINT NOT NULL,
+    prompt TEXT NOT NULL,
+    output_url TEXT NULL,
+    model_deployment TEXT NOT NULL,
+    moderation_result_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS speech_generations (
+    id BIGSERIAL PRIMARY KEY,
+    scope_type TEXT NOT NULL,
+    guild_id BIGINT NULL,
+    channel_id BIGINT NULL,
+    thread_id BIGINT NULL,
+    dm_user_id BIGINT NULL,
+    requester_user_id BIGINT NOT NULL,
+    input_text TEXT NOT NULL,
+    output_file_path TEXT NULL,
+    model_deployment TEXT NOT NULL,
+    voice TEXT NOT NULL,
+    moderation_result_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS scope_settings (
     id BIGSERIAL PRIMARY KEY,
     scope_type TEXT NOT NULL,
@@ -65,6 +98,8 @@ CREATE TABLE IF NOT EXISTS scope_settings (
     bot_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     memory_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     image_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    video_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    speech_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     retention_days_raw_logs INTEGER NOT NULL DEFAULT 30,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_scope_settings UNIQUE NULLS NOT DISTINCT (scope_type, guild_id, channel_id, thread_id, dm_user_id)
