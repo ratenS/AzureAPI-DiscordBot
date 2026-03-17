@@ -95,7 +95,7 @@ class VoiceChatService:
             channel_type=type(voice_channel).__name__,
         )
         try:
-            voice_client = await voice_channel.connect()
+            voice_client = await voice_channel.connect(cls=voice_recv.VoiceRecvClient)
         except Exception as exc:
             logger.exception(
                 "voice_connect_failed",
