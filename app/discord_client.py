@@ -218,7 +218,8 @@ class AzureDiscordBot(commands.Bot):
 
     def _resolve_scope(self, message: discord.Message) -> ScopeRef:
         if isinstance(message.channel, discord.DMChannel):
-            return ScopeRef(scope_type=ScopeType.DM, dm_user_id=message.author.id)
+            dm_user_id = _resolve_dm_user_id(self.user.id if self.user else None, message.channel, message.author.id)
+            return ScopeRef(scope_type=ScopeType.DM, dm_user_id=dm_user_id)
 
         if isinstance(message.channel, discord.Thread):
             return ScopeRef(
@@ -736,6 +737,17 @@ async def _find_previous_bot_message_id(channel: discord.abc.Messageable, curren
             return previous_message.id
         break
     return None
+
+
+def _resolve_dm_user_id(bot_user_id: int | None, channel: discord.DMChannel, message_author_id: int) -> int:
+    recipient = getattr(channel, "recipient", None)
+    if recipient is not None:
+        return recipient.id
+
+    if bot_user_id is not None and message_author_id == bot_user_id:
+        return bot_user_id
+
+    return message_author_id
 
 
 def _resolve_interaction_scope(self: AzureDiscordBot, interaction: discord.Interaction) -> ScopeRef:
