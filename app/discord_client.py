@@ -21,6 +21,7 @@ from app.services.video_service import VideoService
 logger = structlog.get_logger(__name__)
 
 DISCORD_MESSAGE_CHAR_LIMIT = 2000
+DELETE_REACTION_EMOJI = "🗑️"
 
 
 class AzureDiscordBot(commands.Bot):
@@ -37,6 +38,7 @@ class AzureDiscordBot(commands.Bot):
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.reactions = True
         super().__init__(command_prefix="!", intents=intents, application_id=int(settings.discord_application_id))
         self.settings = settings
         self.database = database
@@ -75,6 +77,84 @@ class AzureDiscordBot(commands.Bot):
                 return
 
         await self._handle_chat_message(message, prompt)
+
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        if self.user is not None and payload.user_id == self.user.id:
+            return
+
+        if str(payload.emoji) != DELETE_REACTION_EMOJI:
+            return
+
+        try:
+            user = self.get_user(payload.user_id) or await self.fetch_user(payload.user_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            logger.warning(
+                "bot_admin_reaction_delete_user_unavailable",
+                user_id=payload.user_id,
+                channel_id=payload.channel_id,
+                message_id=payload.message_id,
+            )
+            return
+
+        if user.bot or not self.is_admin(payload.user_id):
+            return
+
+        channel = self.get_channel(payload.channel_id)
+        if channel is None:
+            try:
+                channel = await self.fetch_channel(payload.channel_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                logger.warning(
+                    "bot_admin_reaction_delete_channel_unavailable",
+                    channel_id=payload.channel_id,
+                    message_id=payload.message_id,
+                    user_id=payload.user_id,
+                )
+                return
+
+        if not isinstance(channel, (discord.DMChannel, discord.TextChannel, discord.Thread)):
+            return
+
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except discord.NotFound:
+            logger.info(
+                "bot_admin_reaction_delete_message_not_found",
+                channel_id=payload.channel_id,
+                message_id=payload.message_id,
+                user_id=payload.user_id,
+            )
+            return
+        except discord.Forbidden:
+            logger.warning(
+                "bot_admin_reaction_delete_message_forbidden",
+                channel_id=payload.channel_id,
+                message_id=payload.message_id,
+                user_id=payload.user_id,
+            )
+            return
+        except discord.HTTPException as exc:
+            logger.exception(
+                "bot_admin_reaction_delete_message_http_error",
+                channel_id=payload.channel_id,
+                message_id=payload.message_id,
+                user_id=payload.user_id,
+                error=str(exc),
+            )
+            return
+
+        if self.user is None or message.author.id != self.user.id:
+            return
+
+        scope = self._resolve_scope(message)
+        outcome = await _delete_bot_message_for_scope_from_channel(self, channel, scope, payload.message_id)
+        logger.info(
+            "bot_admin_reaction_delete_completed",
+            channel_id=payload.channel_id,
+            message_id=payload.message_id,
+            user_id=payload.user_id,
+            outcome=outcome,
+        )
 
     async def _handle_chat_message(self, message: discord.Message, prompt: str) -> None:
         scope = self._resolve_scope(message)
@@ -545,66 +625,11 @@ class BotAdminGroup:
         scope: ScopeRef,
         discord_message_id: int,
     ) -> str:
-        with self.bot.database.session() as session:
-            record = self.bot.memory_service.get_assistant_message_by_discord_id(session, scope, discord_message_id)
-
-        logger.info(
-            "bot_admin_delete_message_lookup",
-            scope_type=scope.scope_type.value,
-            guild_id=scope.guild_id,
-            channel_id=scope.channel_id,
-            thread_id=scope.thread_id,
-            dm_user_id=scope.dm_user_id,
-            discord_message_id=discord_message_id,
-            record_found=record is not None,
-        )
-        if record is None:
-            return "No stored bot chat matched that message ID in this scope."
-
         channel = interaction.channel
-        deleted_discord_message = False
-        if channel is not None:
-            try:
-                target_message = await channel.fetch_message(discord_message_id)
-                logger.info(
-                    "bot_admin_delete_message_fetched",
-                    fetched_message_author_id=target_message.author.id,
-                    bot_user_id=self.bot.user.id if self.bot.user else None,
-                    channel_id=channel.id,
-                )
-                if self.bot.user is None or target_message.author.id != self.bot.user.id:
-                    return "The targeted message is not authored by this bot."
-                await target_message.delete()
-                deleted_discord_message = True
-                logger.info("bot_admin_delete_message_deleted_from_discord", discord_message_id=discord_message_id)
-            except discord.NotFound:
-                logger.info("bot_admin_delete_message_not_found_in_discord", discord_message_id=discord_message_id)
-                deleted_discord_message = False
-            except discord.Forbidden:
-                logger.warning("bot_admin_delete_message_forbidden", discord_message_id=discord_message_id)
-                return "I do not have permission to delete that Discord message."
-            except discord.HTTPException as exc:
-                logger.exception("bot_admin_delete_message_http_error", discord_message_id=discord_message_id, error=str(exc))
-                return "Discord rejected the delete request for that message."
+        if channel is None:
+            return "The command must be used from the channel or thread containing the bot reply."
 
-        with self.bot.database.session() as session:
-            deleted_record = self.bot.memory_service.delete_assistant_message_by_discord_id(
-                session,
-                scope,
-                discord_message_id,
-            )
-
-        logger.info(
-            "bot_admin_delete_message_record_deleted",
-            discord_message_id=discord_message_id,
-            deleted_record=deleted_record,
-            deleted_discord_message=deleted_discord_message,
-        )
-        if deleted_discord_message and deleted_record:
-            return "Deleted the bot chat message and removed its stored conversation record."
-        if deleted_record:
-            return "The Discord message was already gone, but its stored conversation record was removed."
-        return "No stored bot chat matched that message ID in this scope."
+        return await _delete_bot_message_for_scope_from_channel(self.bot, channel, scope, discord_message_id)
 
     async def help(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
@@ -634,6 +659,72 @@ def _split_discord_message(content: str, limit: int = DISCORD_MESSAGE_CHAR_LIMIT
         remaining = remaining[split_at:].lstrip()
 
     return [part for part in parts if part]
+
+
+async def _delete_bot_message_for_scope_from_channel(
+    bot: AzureDiscordBot,
+    channel: discord.abc.Messageable,
+    scope: ScopeRef,
+    discord_message_id: int,
+) -> str:
+    with bot.database.session() as session:
+        record = bot.memory_service.get_assistant_message_by_discord_id(session, scope, discord_message_id)
+
+    logger.info(
+        "bot_admin_delete_message_lookup",
+        scope_type=scope.scope_type.value,
+        guild_id=scope.guild_id,
+        channel_id=scope.channel_id,
+        thread_id=scope.thread_id,
+        dm_user_id=scope.dm_user_id,
+        discord_message_id=discord_message_id,
+        record_found=record is not None,
+    )
+    if record is None:
+        return "No stored bot chat matched that message ID in this scope."
+
+    deleted_discord_message = False
+    try:
+        target_message = await channel.fetch_message(discord_message_id)
+        logger.info(
+            "bot_admin_delete_message_fetched",
+            fetched_message_author_id=target_message.author.id,
+            bot_user_id=bot.user.id if bot.user else None,
+            channel_id=channel.id,
+        )
+        if bot.user is None or target_message.author.id != bot.user.id:
+            return "The targeted message is not authored by this bot."
+        await target_message.delete()
+        deleted_discord_message = True
+        logger.info("bot_admin_delete_message_deleted_from_discord", discord_message_id=discord_message_id)
+    except discord.NotFound:
+        logger.info("bot_admin_delete_message_not_found_in_discord", discord_message_id=discord_message_id)
+        deleted_discord_message = False
+    except discord.Forbidden:
+        logger.warning("bot_admin_delete_message_forbidden", discord_message_id=discord_message_id)
+        return "I do not have permission to delete that Discord message."
+    except discord.HTTPException as exc:
+        logger.exception("bot_admin_delete_message_http_error", discord_message_id=discord_message_id, error=str(exc))
+        return "Discord rejected the delete request for that message."
+
+    with bot.database.session() as session:
+        deleted_record = bot.memory_service.delete_assistant_message_by_discord_id(
+            session,
+            scope,
+            discord_message_id,
+        )
+
+    logger.info(
+        "bot_admin_delete_message_record_deleted",
+        discord_message_id=discord_message_id,
+        deleted_record=deleted_record,
+        deleted_discord_message=deleted_discord_message,
+    )
+    if deleted_discord_message and deleted_record:
+        return "Deleted the bot chat message and removed its stored conversation record."
+    if deleted_record:
+        return "The Discord message was already gone, but its stored conversation record was removed."
+    return "No stored bot chat matched that message ID in this scope."
 
 
 async def _find_previous_bot_message_id(channel: discord.abc.Messageable, current_message_id: int, bot_user_id: int | None) -> int | None:
