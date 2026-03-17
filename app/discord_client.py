@@ -14,7 +14,6 @@ from app.services.chat_service import ChatService
 from app.services.image_service import ImageService
 from app.services.memory_service import MemoryService
 from app.services.rate_limit_service import RateLimitExceeded, RateLimitService
-from app.services.safety_service import SafetyService, SafetyViolation
 
 logger = structlog.get_logger(__name__)
 
@@ -27,7 +26,6 @@ class AzureDiscordBot(commands.Bot):
         chat_service: ChatService,
         image_service: ImageService,
         memory_service: MemoryService,
-        safety_service: SafetyService,
         rate_limit_service: RateLimitService,
     ) -> None:
         intents = discord.Intents.default()
@@ -38,7 +36,6 @@ class AzureDiscordBot(commands.Bot):
         self.chat_service = chat_service
         self.image_service = image_service
         self.memory_service = memory_service
-        self.safety_service = safety_service
         self.rate_limit_service = rate_limit_service
 
     async def setup_hook(self) -> None:
@@ -83,8 +80,6 @@ class AzureDiscordBot(commands.Bot):
             if message.guild:
                 self.rate_limit_service.check(f"guild:{message.guild.id}")
 
-            moderation_result = await self.safety_service.analyze_text(prompt)
-
             with self.database.session() as session:
                 self.memory_service.persist_user_message(
                     session,
@@ -92,21 +87,18 @@ class AzureDiscordBot(commands.Bot):
                     message.author.id,
                     prompt,
                     message.id,
-                    moderation_result,
+                    {},
                 )
                 recent_turns = self.memory_service.get_recent_turns(session, scope)
                 memories = self.memory_service.get_relevant_memories(session, scope)
 
             reply = await self.chat_service.generate_reply(prompt, recent_turns, memories)
-            output_moderation = await self.safety_service.analyze_text(reply)
 
             with self.database.session() as session:
-                self.memory_service.persist_assistant_message(session, scope, reply, output_moderation)
+                self.memory_service.persist_assistant_message(session, scope, reply, {})
                 self.memory_service.maybe_extract_memories(session, scope, prompt)
 
             await message.reply(reply)
-        except SafetyViolation:
-            await message.reply("The request was blocked by content safety policy.")
         except RateLimitExceeded:
             await message.reply("Rate limit exceeded. Please wait a minute and try again.")
         except Exception as exc:
@@ -161,18 +153,15 @@ class ImageCommand:
 
         try:
             self.bot.rate_limit_service.check(f"user:{interaction.user.id}:image")
-            moderation_result = await self.bot.safety_service.analyze_text(prompt)
             with self.bot.database.session() as session:
                 image_url = await self.bot.image_service.generate_image(
                     session,
                     scope,
                     interaction.user.id,
                     prompt,
-                    moderation_result,
+                    {},
                 )
             await interaction.followup.send(image_url)
-        except SafetyViolation:
-            await interaction.followup.send("The image prompt was blocked by content safety policy.")
         except RateLimitExceeded:
             await interaction.followup.send("Rate limit exceeded for image generation.")
         except Exception as exc:

@@ -16,7 +16,6 @@ from app.services.chat_service import ChatService
 from app.services.image_service import ImageService
 from app.services.memory_service import MemoryService
 from app.services.rate_limit_service import RateLimitService
-from app.services.safety_service import SafetyService
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -30,11 +29,6 @@ memory_service = MemoryService(
     sync_heuristics_enabled=settings.memory_sync_heuristics_enabled,
 )
 chat_service = ChatService(settings)
-safety_service = SafetyService(
-    endpoint=settings.azure_content_safety_endpoint,
-    api_key=settings.azure_content_safety_api_key,
-    block_severity=settings.azure_content_safety_block_severity,
-)
 rate_limit_service = RateLimitService(settings.rate_limit_requests_per_minute)
 image_service = ImageService(settings, repository)
 discord_bot = AzureDiscordBot(
@@ -43,7 +37,6 @@ discord_bot = AzureDiscordBot(
     chat_service=chat_service,
     image_service=image_service,
     memory_service=memory_service,
-    safety_service=safety_service,
     rate_limit_service=rate_limit_service,
 )
 

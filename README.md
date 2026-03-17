@@ -1,6 +1,6 @@
 # Azure OpenAI Discord Bot
 
-Dockerized Discord bot application using Azure OpenAI and Azure Content Safety to provide a ChatGPT-like experience with scoped memory and image generation.
+Dockerized Discord bot application using Azure OpenAI to provide a ChatGPT-like experience with scoped memory and image generation.
 
 ## Features
 - Mention-based chat in approved guild channels
@@ -10,7 +10,6 @@ Dockerized Discord bot application using Azure OpenAI and Azure Content Safety t
 - Admin memory inspection, clearing, and toggling
 - Image generation with metadata persistence
 - PostgreSQL persistence with `pgvector`
-- Azure Content Safety checks before and after generation
 - Health endpoints for container readiness and liveness
 
 ## Project structure
@@ -20,7 +19,6 @@ Dockerized Discord bot application using Azure OpenAI and Azure Content Safety t
 - [`app/services/chat_service.py`](app/services/chat_service.py)
 - [`app/services/image_service.py`](app/services/image_service.py)
 - [`app/services/memory_service.py`](app/services/memory_service.py)
-- [`app/services/safety_service.py`](app/services/safety_service.py)
 - [`app/services/rate_limit_service.py`](app/services/rate_limit_service.py)
 - [`app/repositories/memory_repository.py`](app/repositories/memory_repository.py)
 - [`db/init/001_enable_pgvector.sql`](db/init/001_enable_pgvector.sql)
@@ -33,11 +31,10 @@ Dockerized Discord bot application using Azure OpenAI and Azure Content Safety t
 - Docker Engine with Compose support
 - Discord bot application and token
 - Azure OpenAI resource with deployed chat, embedding, and image models
-- Azure Content Safety resource
 
 ## Configuration
 1. Copy [`.env.example`](.env.example) to [`.env`](.env.example).
-2. Fill in the Discord, Azure OpenAI, and Azure Content Safety credentials.
+2. Fill in the Discord and Azure OpenAI credentials.
 3. Set [`DISCORD_ADMIN_USER_IDS`](.env.example) to one or more comma-separated Discord user IDs.
 4. Adjust [`BOT_PERSONA`](.env.example) and [`SYSTEM_PROMPT_BASE`](.env.example) as needed.
 
